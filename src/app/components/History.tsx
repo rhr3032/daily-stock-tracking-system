@@ -30,6 +30,11 @@ export function History() {
   const totalSales = filteredLogs.reduce((sum, log) => sum + log.soldValue, 0);
   const totalSold = filteredLogs.reduce((sum, log) => sum + log.soldQty, 0);
 
+  const getAvailableStock = (productId: string) => {
+    const product = products.find((item) => item.id === productId);
+    return product ? product.currentStock : 0;
+  };
+
   const exportToCSV = () => {
     const headers = ['Date', 'Product', 'Ordered', 'Returned', 'Sold', 'Value (৳)'];
     const rows = filteredLogs.map(log => [
@@ -173,6 +178,7 @@ export function History() {
                   <th className="text-right py-3 px-4 font-medium text-gray-700">Ordered</th>
                   <th className="text-right py-3 px-4 font-medium text-gray-700">Returned</th>
                   <th className="text-right py-3 px-4 font-medium text-gray-700">Sold</th>
+                  <th className="text-right py-3 px-4 font-medium text-gray-700">Available Stock</th>
                   <th className="text-right py-3 px-4 font-medium text-gray-700">Value</th>
                 </tr>
               </thead>
@@ -191,6 +197,9 @@ export function History() {
                     </td>
                     <td className="py-3 px-4 text-right text-green-600 font-medium">
                       {log.soldQty.toLocaleString()}
+                    </td>
+                    <td className="py-3 px-4 text-right font-medium text-blue-700">
+                      {getAvailableStock(log.productId).toLocaleString()}
                     </td>
                     <td className="py-3 px-4 text-right font-semibold">
                       ৳{log.soldValue.toLocaleString()}

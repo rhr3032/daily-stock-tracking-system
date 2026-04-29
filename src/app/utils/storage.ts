@@ -37,6 +37,16 @@ export const storage = {
     }
   },
 
+  deleteProduct(id: string): void {
+    const products = this.getProducts();
+    const filtered = products.filter(p => p.id !== id);
+    this.saveProducts(filtered);
+    // Also remove logs related to this product
+    const logs = this.getLogs();
+    const remainingLogs = logs.filter(l => l.productId !== id);
+    this.saveLogs(remainingLogs);
+  },
+
   getProductById(id: string): Product | undefined {
     return this.getProducts().find(p => p.id === id);
   },
@@ -74,6 +84,35 @@ export const storage = {
     }
 
     return newLog;
+  },
+
+  updateLogReturnedQuantity(logId: string, returnedQty: number): void {
+    const logs = this.getLogs();
+    const logIndex = logs.findIndex(log => log.id === logId);
+    if (logIndex === -1) return;
+
+    const currentLog = logs[logIndex];
+    if (returnedQty < 0 || returnedQty > currentLog.orderedQty) return;
+
+    const products = this.getProducts();
+    const productIndex = products.findIndex(p => p.id === currentLog.productId);
+    if (productIndex === -1) return;
+
+    const oldReturnedQty = currentLog.returnedQty;
+    const returnedDelta = returnedQty - oldReturnedQty;
+    const newSoldQty = currentLog.orderedQty - returnedQty;
+
+    products[productIndex].currentStock += returnedDelta;
+
+    logs[logIndex] = {
+      ...currentLog,
+      returnedQty,
+      soldQty: newSoldQty,
+      soldValue: newSoldQty * products[productIndex].unitCost,
+    };
+
+    this.saveProducts(products);
+    this.saveLogs(logs);
   },
 
   getLogsByProduct(productId: string): DailyLog[] {

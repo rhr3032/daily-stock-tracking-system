@@ -1,6 +1,7 @@
 export interface Product {
   id: string;
   name: string;
+  sizeUnit?: string;
   totalQuantity: number;
   totalCost: number;
   unitCost: number;

@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { LayoutDashboard, Package, ClipboardList, History, Menu, X } from 'lucide-react';
+import { LayoutDashboard, Package, ClipboardList, History, Menu, X, RotateCcw } from 'lucide-react';
 import { Dashboard } from './components/Dashboard';
 import { AddProduct } from './components/AddProduct';
 import { DailyEntry } from './components/DailyEntry';
+import { EveningReturn } from './components/EveningReturn';
 import { History as HistoryPage } from './components/History';
 
-type Page = 'dashboard' | 'products' | 'entry' | 'history';
+type Page = 'dashboard' | 'products' | 'entry' | 'returns' | 'history';
 
 export default function App() {
   const [currentPage, setCurrentPage] = useState<Page>('dashboard');
@@ -14,7 +15,8 @@ export default function App() {
   const navigation = [
     { id: 'dashboard' as Page, name: 'Dashboard', icon: LayoutDashboard },
     { id: 'products' as Page, name: 'Add Product', icon: Package },
-    { id: 'entry' as Page, name: 'Daily Entry', icon: ClipboardList },
+    { id: 'entry' as Page, name: 'Morning Entry', icon: ClipboardList },
+    { id: 'returns' as Page, name: 'Evening Returns', icon: RotateCcw },
     { id: 'history' as Page, name: 'History', icon: History },
   ];
 
@@ -26,6 +28,8 @@ export default function App() {
         return <AddProduct onSuccess={() => setCurrentPage('dashboard')} />;
       case 'entry':
         return <DailyEntry />;
+      case 'returns':
+        return <EveningReturn />;
       case 'history':
         return <HistoryPage />;
     }

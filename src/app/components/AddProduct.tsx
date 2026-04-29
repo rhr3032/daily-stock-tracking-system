@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Package, Plus } from 'lucide-react';
+import { Package, Plus, Edit, Trash2 } from 'lucide-react';
 import { storage } from '../utils/storage';
 
 interface ProductFormData {
   name: string;
+  sizeUnit: string;
   totalQuantity: number;
   totalCost: number;
 }
@@ -27,6 +28,7 @@ export function AddProduct({ onSuccess }: AddProductProps) {
 
     storage.addProduct({
       name: data.name,
+      sizeUnit: data.sizeUnit,
       totalQuantity: data.totalQuantity,
       totalCost: data.totalCost,
       unitCost: unitCost,
@@ -91,6 +93,21 @@ export function AddProduct({ onSuccess }: AddProductProps) {
               />
               {errors.name && (
                 <p className="text-red-500 text-sm mt-1">{errors.name.message}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Product Size/Unit
+              </label>
+              <input
+                type="text"
+                {...register('sizeUnit', { required: 'Product size/unit is required' })}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                placeholder="e.g., kg, ml, liter"
+              />
+              {errors.sizeUnit && (
+                <p className="text-red-500 text-sm mt-1">{errors.sizeUnit.message}</p>
               )}
             </div>
 
@@ -167,6 +184,50 @@ export function AddProduct({ onSuccess }: AddProductProps) {
 
 function RecentProducts() {
   const [products, setProducts] = useState(storage.getProducts());
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editSizeUnit, setEditSizeUnit] = useState('');
+  const [editTotalQuantity, setEditTotalQuantity] = useState<number>(0);
+  const [editTotalCost, setEditTotalCost] = useState<number>(0);
+
+  const refresh = () => setProducts(storage.getProducts());
+
+  const startEdit = (product: any) => {
+    setEditingId(product.id);
+    setEditName(product.name);
+    setEditSizeUnit(product.sizeUnit || '');
+    setEditTotalQuantity(product.totalQuantity);
+    setEditTotalCost(product.totalCost);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+  };
+
+  const saveEdit = (product: any) => {
+    if (!editTotalQuantity || editTotalQuantity < 1) return;
+    const unitCost = editTotalCost / editTotalQuantity;
+    const delta = editTotalQuantity - product.totalQuantity;
+    const newCurrentStock = product.currentStock + delta;
+
+    storage.updateProduct(product.id, {
+      name: editName,
+      sizeUnit: editSizeUnit,
+      totalQuantity: editTotalQuantity,
+      totalCost: editTotalCost,
+      unitCost: unitCost,
+      currentStock: newCurrentStock,
+    });
+
+    setEditingId(null);
+    refresh();
+  };
+
+  const handleDelete = (id: string) => {
+    if (!confirm('Delete this product and its logs?')) return;
+    storage.deleteProduct(id);
+    refresh();
+  };
 
   return (
     <div className="bg-white rounded-lg shadow p-6">
@@ -177,28 +238,60 @@ function RecentProducts() {
         <div className="space-y-3">
           {products.slice().reverse().map((product) => (
             <div key={product.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="font-semibold">{product.name}</h3>
-                <span className="text-sm text-gray-600">Stock: {product.currentStock}</span>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              {editingId === product.id ? (
                 <div>
-                  <p className="text-gray-600">Total Qty</p>
-                  <p className="font-medium">{product.totalQuantity}</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="font-semibold">Editing: {product.name}</h3>
+                    <span className="text-sm text-gray-600">Available: {product.currentStock}</span>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
+                    <input className="px-3 py-2 border rounded" value={editName} onChange={e => setEditName(e.target.value)} />
+                    <input className="px-3 py-2 border rounded" value={editSizeUnit} onChange={e => setEditSizeUnit(e.target.value)} placeholder="kg/ml/liter" />
+                    <input type="number" className="px-3 py-2 border rounded" value={editTotalQuantity} onChange={e => setEditTotalQuantity(Number(e.target.value))} />
+                    <input type="number" step="0.01" className="px-3 py-2 border rounded" value={editTotalCost} onChange={e => setEditTotalCost(Number(e.target.value))} />
+                  </div>
+                  <div className="flex gap-2">
+                    <button className="px-4 py-2 bg-green-600 text-white rounded" onClick={() => saveEdit(product)}>Save</button>
+                    <button className="px-4 py-2 border rounded" onClick={cancelEdit}>Cancel</button>
+                  </div>
                 </div>
+              ) : (
                 <div>
-                  <p className="text-gray-600">Total Cost</p>
-                  <p className="font-medium">৳{product.totalCost.toLocaleString()}</p>
+                  <div className="flex items-center justify-between mb-2">
+                    <div>
+                      <h3 className="font-semibold">{product.name}</h3>
+                      <p className="text-xs text-gray-500">Size/Unit: {product.sizeUnit || 'N/A'}</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-gray-600">Available: {product.currentStock}</span>
+                      <button onClick={() => startEdit(product)} className="p-2 rounded hover:bg-gray-100" title="Edit">
+                        <Edit className="w-4 h-4 text-blue-600" />
+                      </button>
+                      <button onClick={() => handleDelete(product.id)} className="p-2 rounded hover:bg-gray-100" title="Delete">
+                        <Trash2 className="w-4 h-4 text-red-600" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                    <div>
+                      <p className="text-gray-600">Total Qty</p>
+                      <p className="font-medium">{product.totalQuantity}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600">Total Cost</p>
+                      <p className="font-medium">৳{product.totalCost.toLocaleString()}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600">Unit Cost</p>
+                      <p className="font-medium">৳{product.unitCost.toFixed(2)}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-600">Stock Value</p>
+                      <p className="font-medium">৳{(product.currentStock * product.unitCost).toLocaleString()}</p>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-gray-600">Unit Cost</p>
-                  <p className="font-medium">৳{product.unitCost.toFixed(2)}</p>
-                </div>
-                <div>
-                  <p className="text-gray-600">Stock Value</p>
-                  <p className="font-medium">৳{(product.currentStock * product.unitCost).toLocaleString()}</p>
-                </div>
-              </div>
+              )}
             </div>
           ))}
         </div>

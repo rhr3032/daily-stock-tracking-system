@@ -74,14 +74,19 @@ export function Dashboard() {
                 <tr className="border-b">
                   <th className="text-left py-3 px-4">Product Name</th>
                   <th className="text-right py-3 px-4">Unit Cost</th>
-                  <th className="text-right py-3 px-4">Current Stock</th>
+                  <th className="text-right py-3 px-4">Available Stock</th>
                   <th className="text-right py-3 px-4">Stock Value</th>
                 </tr>
               </thead>
               <tbody>
                 {products.map((product) => (
                   <tr key={product.id} className="border-b hover:bg-gray-50">
-                    <td className="py-3 px-4">{product.name}</td>
+                    <td className="py-3 px-4">
+                      <div>
+                        <p>{product.name}</p>
+                        <p className="text-xs text-gray-500">{product.sizeUnit || 'N/A'}</p>
+                      </div>
+                    </td>
                     <td className="py-3 px-4 text-right">৳{product.unitCost.toFixed(2)}</td>
                     <td className="py-3 px-4 text-right">{product.currentStock.toLocaleString()}</td>
                     <td className="py-3 px-4 text-right">৳{(product.currentStock * product.unitCost).toLocaleString()}</td>

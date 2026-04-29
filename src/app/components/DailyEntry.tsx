@@ -8,7 +8,6 @@ interface DailyEntryFormData {
   productId: string;
   date: string;
   orderedQty: number;
-  returnedQty: number;
 }
 
 export function DailyEntry() {
@@ -26,21 +25,12 @@ export function DailyEntry() {
 
   const productId = watch('productId');
   const orderedQty = watch('orderedQty') || 0;
-  const returnedQty = watch('returnedQty') || 0;
 
   const selectedProduct = products.find(p => p.id === productId);
-  const soldQty = Math.max(0, orderedQty - returnedQty);
+  const soldQty = Math.max(0, orderedQty);
   const soldValue = selectedProduct ? soldQty * selectedProduct.unitCost : 0;
 
   const onSubmit = (data: DailyEntryFormData) => {
-    if (data.returnedQty > data.orderedQty) {
-      setError('returnedQty', {
-        type: 'manual',
-        message: 'Returned quantity cannot be greater than ordered quantity',
-      });
-      return;
-    }
-
     const product = products.find(p => p.id === data.productId);
     if (!product) {
       setError('productId', {
@@ -50,11 +40,11 @@ export function DailyEntry() {
       return;
     }
 
-    const soldQty = data.orderedQty - data.returnedQty;
+    const soldQty = data.orderedQty;
     if (soldQty > product.currentStock) {
       setError('orderedQty', {
         type: 'manual',
-        message: `Cannot sell more than current stock (${product.currentStock})`,
+        message: `Cannot order more than available stock (${product.currentStock})`,
       });
       return;
     }
@@ -65,7 +55,7 @@ export function DailyEntry() {
       productId: data.productId,
       date: data.date,
       orderedQty: data.orderedQty,
-      returnedQty: data.returnedQty,
+      returnedQty: 0,
       soldQty,
       soldValue,
     });
@@ -75,7 +65,6 @@ export function DailyEntry() {
       date: new Date().toISOString().split('T')[0],
       productId: '',
       orderedQty: 0,
-      returnedQty: 0,
     });
     setProducts(storage.getProducts());
 
@@ -86,7 +75,7 @@ export function DailyEntry() {
     <div className="space-y-6">
       <div>
         <h1 className="mb-2">Daily Entry</h1>
-        <p className="text-gray-600">Record daily sales transactions</p>
+        <p className="text-gray-600">Record morning ordered quantities</p>
       </div>
 
       {successMessage && (
@@ -102,7 +91,7 @@ export function DailyEntry() {
           </div>
           <div>
             <h2 className="font-semibold">New Transaction</h2>
-            <p className="text-sm text-gray-600">Enter ordered and returned quantities</p>
+            <p className="text-sm text-gray-600">Enter morning ordered quantity</p>
           </div>
         </div>
 
@@ -133,7 +122,7 @@ export function DailyEntry() {
                 <option value="">Select a product</option>
                 {products.map((product) => (
                   <option key={product.id} value={product.id}>
-                    {product.name} (Stock: {product.currentStock})
+                    {product.name} {product.sizeUnit ? `(${product.sizeUnit})` : ''} (Available: {product.currentStock})
                   </option>
                 ))}
               </select>
@@ -143,7 +132,7 @@ export function DailyEntry() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Ordered Quantity (Morning)
@@ -159,24 +148,6 @@ export function DailyEntry() {
               />
               {errors.orderedQty && (
                 <p className="text-red-500 text-sm mt-1">{errors.orderedQty.message}</p>
-              )}
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Returned Quantity (Evening)
-              </label>
-              <input
-                type="number"
-                {...register('returnedQty', {
-                  required: 'Returned quantity is required',
-                  min: { value: 0, message: 'Cannot be negative' },
-                })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-                placeholder="e.g., 20"
-              />
-              {errors.returnedQty && (
-                <p className="text-red-500 text-sm mt-1">{errors.returnedQty.message}</p>
               )}
             </div>
           </div>
@@ -202,6 +173,18 @@ export function DailyEntry() {
                 value={selectedProduct ? (selectedProduct.currentStock - soldQty).toLocaleString() : '0'}
                 bgColor="bg-white"
               />
+            </div>
+          </div>
+
+          <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+            <p className="text-sm font-medium text-gray-700 mb-3">Available Stock by Product</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+              {products.map((product) => (
+                <div key={product.id} className="flex items-center justify-between bg-white rounded px-3 py-2">
+                  <span className="text-gray-700">{product.name} {product.sizeUnit ? `(${product.sizeUnit})` : ''}</span>
+                  <span className="font-semibold">{product.currentStock.toLocaleString()}</span>
+                </div>
+              ))}
             </div>
           </div>
 
