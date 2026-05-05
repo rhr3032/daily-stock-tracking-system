@@ -43,10 +43,13 @@ export function Dashboard() {
 
   const today = new Date().toISOString().split('T')[0];
 
-  const todayOrders = orders.filter((item) => item.date === today);
   const todaySales = sales.filter((item) => item.date === today);
   const todayDispatches = dispatches.filter((item) => item.date === today);
   const todayReturns = returns.filter((item) => item.date === today);
+
+  const todayDispatchQty = todayDispatches.reduce((sum, item) => sum + item.quantity, 0);
+  const todayReturnQty = todayReturns.reduce((sum, item) => sum + item.quantity, 0);
+  const todayNetMovement = todayDispatchQty - todayReturnQty;
 
   const monthOrders = orders.filter((item) => item.date.startsWith(month));
   const monthSales = sales.filter((item) => item.date.startsWith(month));
@@ -156,15 +159,15 @@ export function Dashboard() {
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Today's Workflow" subtitle="Orders, dispatches, sales, and returns">
+        <ChartCard title="Today's Workflow" subtitle="Dispatch, returns, and stock movement at a glance">
           <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-            <MiniMetric label="Orders" value={todayOrders.reduce((sum, item) => sum + item.quantity, 0)} />
-            <MiniMetric label="Dispatch" value={todayDispatches.reduce((sum, item) => sum + item.quantity, 0)} />
-            <MiniMetric label="Sales" value={todaySales.reduce((sum, item) => sum + item.quantity, 0)} />
-            <MiniMetric label="Returns" value={todayReturns.reduce((sum, item) => sum + item.quantity, 0)} />
+            <MiniMetric label="Dispatch" value={todayDispatchQty} />
+            <MiniMetric label="Returns" value={todayReturnQty} />
+            <MiniMetric label="Net Movement" value={todayNetMovement} />
+            <MiniMetric label="Sales Qty" value={todaySales.reduce((sum, item) => sum + item.quantity, 0)} />
           </div>
           <div className="mt-6 rounded-2xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-300">
-            Morning dispatch reduces stock, night sales capture revenue, and returns restore inventory.
+            Dispatch moves stock out, returns bring inventory back, and net movement shows the day&apos;s stock flow.
           </div>
         </ChartCard>
       </div>
