@@ -1,0 +1,52 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Product {
+  id               String           @id @default(uuid())
+  name             String
+  unit             String?
+  purchasePrice    Float
+  sellingPrice     Float
+  totalQuantity    Int
+  currentStock     Int
+  lowStockThreshold Int
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  dispatches       MorningDispatch[]
+  returns          DailyReturn[]
+}
+
+
+model MorningDispatch {
+  id         String   @id @default(uuid())
+  date       String
+  productId  String
+  quantity   Int
+  createdAt  DateTime @default(now())
+
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([date])
+  @@index([productId])
+}
+
+model DailyReturn {
+  id         String   @id @default(uuid())
+  date       String
+  productId  String
+  quantity   Int
+  amount     Float
+  createdAt  DateTime @default(now())
+
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([date])
+  @@index([productId])
+}

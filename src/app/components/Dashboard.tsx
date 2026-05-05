@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   BarChart3,
@@ -30,14 +30,30 @@ const STATUS_COLORS = ['#34d399', '#fbbf24', '#fb7185'];
 
 export function Dashboard() {
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [products, setProducts] = useState<Product[]>([]);
+  const [orders, setOrders] = useState<DailyOrder[]>([]);
+  const [sales, setSales] = useState<DailySale[]>([]);
+  const [dispatches, setDispatches] = useState<MorningDispatch[]>([]);
+  const [returns, setReturns] = useState<DailyReturn[]>([]);
 
-  const { products, orders, sales, dispatches, returns } = useMemo(() => {
-    return {
-      products: storage.getProducts(),
-      orders: storage.getOrders(),
-      sales: storage.getSales(),
-      dispatches: storage.getDispatches(),
-      returns: storage.getReturns(),
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadDashboard = async () => {
+      const data = await storage.getBootstrap();
+      if (cancelled) return;
+
+      setProducts(data.products);
+      setOrders(data.orders);
+      setSales(data.sales);
+      setDispatches(data.dispatches);
+      setReturns(data.returns);
+    };
+
+    void loadDashboard();
+
+    return () => {
+      cancelled = true;
     };
   }, [month]);
 

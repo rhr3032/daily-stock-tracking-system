@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { Package, Plus, Edit, Trash2, Search, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { storage } from '../utils/storage';
@@ -20,36 +20,53 @@ interface AddProductProps {
 export function AddProduct({ onSuccess }: AddProductProps) {
   const [showForm, setShowForm] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
+  const [products, setProducts] = useState<Product[]>([]);
   const { register, handleSubmit, watch, reset, formState: { errors } } = useForm<ProductFormData>({
     defaultValues: {
       lowStockThreshold: 10,
     },
   });
 
+  const loadProducts = async () => {
+    setProducts(await storage.getProducts());
+  };
+
+  useEffect(() => {
+    void loadProducts();
+  }, []);
+
   const totalQuantity = watch('totalQuantity') || 0;
   const purchasePrice = watch('purchasePrice') || 0;
   const sellingPrice = watch('sellingPrice') || 0;
   const grossProfitPerUnit = sellingPrice - purchasePrice;
 
-  const onSubmit = (data: ProductFormData) => {
-    storage.addProduct({
-      name: data.name,
-      unit: data.unit,
-      purchasePrice: data.purchasePrice,
-      sellingPrice: data.sellingPrice,
-      totalQuantity: data.totalQuantity,
-      currentStock: data.totalQuantity,
-      lowStockThreshold: data.lowStockThreshold,
-    });
+  const onSubmit = async (data: ProductFormData) => {
+    setErrorMessage('');
+    try {
+      await storage.addProduct({
+        name: data.name,
+        unit: data.unit,
+        purchasePrice: data.purchasePrice,
+        sellingPrice: data.sellingPrice,
+        totalQuantity: data.totalQuantity,
+        currentStock: data.totalQuantity,
+        lowStockThreshold: data.lowStockThreshold,
+      });
 
-    setSuccessMessage(`${data.name} added successfully!`);
-    reset({ lowStockThreshold: 10 });
-    setTimeout(() => {
-      setSuccessMessage('');
-      setShowForm(false);
-      onSuccess?.();
-    }, 1600);
+      setSuccessMessage(`${data.name} added successfully!`);
+      reset({ lowStockThreshold: 10 });
+      await loadProducts();
+      setTimeout(() => {
+        setSuccessMessage('');
+        setShowForm(false);
+        onSuccess?.();
+      }, 1600);
+    } catch (err) {
+      console.error('Add product failed', err);
+      setErrorMessage(err instanceof Error ? err.message : 'Failed to add product');
+    }
   };
 
   return (
@@ -73,6 +90,11 @@ export function AddProduct({ onSuccess }: AddProductProps) {
       {successMessage && (
         <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-emerald-200">
           {successMessage}
+        </div>
+      )}
+      {errorMessage && (
+        <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-rose-200">
+          {errorMessage}
         </div>
       )}
 
@@ -120,6 +142,7 @@ export function AddProduct({ onSuccess }: AddProductProps) {
                   {...register('purchasePrice', {
                     required: 'Purchase price is required',
                     min: { value: 0.01, message: 'Purchase price must be greater than 0' },
+                    valueAsNumber: true,
                   })}
                   className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none"
                   placeholder="e.g., 120"
@@ -135,6 +158,7 @@ export function AddProduct({ onSuccess }: AddProductProps) {
                   {...register('sellingPrice', {
                     required: 'Selling price is required',
                     min: { value: 0.01, message: 'Selling price must be greater than 0' },
+                    valueAsNumber: true,
                   })}
                   className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none"
                   placeholder="e.g., 160"
@@ -151,6 +175,7 @@ export function AddProduct({ onSuccess }: AddProductProps) {
                   {...register('totalQuantity', {
                     required: 'Quantity is required',
                     min: { value: 1, message: 'Quantity must be at least 1' },
+                    valueAsNumber: true,
                   })}
                   className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none"
                   placeholder="e.g., 1000"
@@ -165,6 +190,7 @@ export function AddProduct({ onSuccess }: AddProductProps) {
                   {...register('lowStockThreshold', {
                     required: 'Threshold is required',
                     min: { value: 0, message: 'Threshold cannot be negative' },
+                    valueAsNumber: true,
                   })}
                   className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none"
                   placeholder="e.g., 20"
@@ -212,7 +238,7 @@ export function AddProduct({ onSuccess }: AddProductProps) {
         </div>
       )}
 
-      <RecentProducts searchTerm={searchTerm} setSearchTerm={setSearchTerm} />
+      <RecentProducts searchTerm={searchTerm} setSearchTerm={setSearchTerm} products={products} onRefresh={loadProducts} />
     </div>
   );
 }
@@ -220,11 +246,14 @@ export function AddProduct({ onSuccess }: AddProductProps) {
 function RecentProducts({
   searchTerm,
   setSearchTerm,
+  products,
+  onRefresh,
 }: {
   searchTerm: string;
   setSearchTerm: (value: string) => void;
+  products: Product[];
+  onRefresh: () => Promise<void>;
 }) {
-  const [products, setProducts] = useState<Product[]>(storage.getProducts());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editUnit, setEditUnit] = useState('');
@@ -232,8 +261,6 @@ function RecentProducts({
   const [editSellingPrice, setEditSellingPrice] = useState<number>(0);
   const [editTotalQuantity, setEditTotalQuantity] = useState<number>(0);
   const [editLowStockThreshold, setEditLowStockThreshold] = useState<number>(0);
-
-  const refresh = () => setProducts(storage.getProducts());
 
   const filteredProducts = useMemo(() => {
     const normalized = searchTerm.trim().toLowerCase();
@@ -259,12 +286,12 @@ function RecentProducts({
     setEditingId(null);
   };
 
-  const saveEdit = (product: Product) => {
+  const saveEdit = async (product: Product) => {
     if (editTotalQuantity < 1) return;
     const stockDelta = editTotalQuantity - product.totalQuantity;
     const newCurrentStock = Math.max(0, product.currentStock + stockDelta);
 
-    storage.updateProduct(product.id, {
+    await storage.updateProduct(product.id, {
       name: editName,
       unit: editUnit,
       purchasePrice: editPurchasePrice,
@@ -275,13 +302,13 @@ function RecentProducts({
     });
 
     setEditingId(null);
-    refresh();
+    await onRefresh();
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (!confirm('Delete this product and its linked records?')) return;
-    storage.deleteProduct(id);
-    refresh();
+    await storage.deleteProduct(id);
+    await onRefresh();
   };
 
   return (
@@ -332,7 +359,7 @@ function RecentProducts({
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                       <input type="number" className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-white" value={editLowStockThreshold} onChange={(e) => setEditLowStockThreshold(Number(e.target.value))} />
                       <div className="flex gap-2">
-                        <button className="rounded-lg bg-emerald-500 px-4 py-2 font-medium text-slate-950" onClick={() => saveEdit(product)}>Save</button>
+                        <button className="rounded-lg bg-emerald-500 px-4 py-2 font-medium text-slate-950" onClick={() => void saveEdit(product)}>Save</button>
                         <button className="rounded-lg border border-white/10 px-4 py-2 text-slate-200" onClick={cancelEdit}>Cancel</button>
                       </div>
                     </div>

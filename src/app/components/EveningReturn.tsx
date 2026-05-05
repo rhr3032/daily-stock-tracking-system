@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Calendar, RotateCcw, Search } from 'lucide-react';
 import { storage } from '../utils/storage';
-import { Product } from '../types';
+import { Product, MorningDispatch, DailyReturn } from '../types';
 
 export function EveningReturn() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [dispatches, setDispatches] = useState<MorningDispatch[]>([]);
+  const [returns, setReturns] = useState<DailyReturn[]>([]);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [searchTerm, setSearchTerm] = useState('');
@@ -12,26 +14,33 @@ export function EveningReturn() {
   const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
-    setProducts(storage.getProducts());
-  }, []);
+    const loadData = async () => {
+      const [allProducts, nextDispatches, nextReturns] = await Promise.all([
+        storage.getProducts(),
+        storage.getDispatches(),
+        storage.getReturns(),
+      ]);
 
-  useEffect(() => {
-    const dispatches = storage.getDispatches().filter((dispatch) => dispatch.date === date);
-    const returns = storage.getReturns().filter((entry) => entry.date === date);
+      setProducts(allProducts);
+      setDispatches(nextDispatches);
+      setReturns(nextReturns);
 
-    const nextQuantities = products.reduce<Record<string, number>>((acc, product) => {
-      const dispatchedQty = dispatches
-        .filter((dispatch) => dispatch.productId === product.id)
-        .reduce((sum, dispatch) => sum + dispatch.quantity, 0);
-      const returnedQty = returns
-        .filter((entry) => entry.productId === product.id)
-        .reduce((sum, entry) => sum + entry.quantity, 0);
-      acc[product.id] = Math.max(0, dispatchedQty - returnedQty);
-      return acc;
-    }, {});
+      const nextQuantities = allProducts.reduce<Record<string, number>>((acc, product) => {
+        const dispatchedQty = nextDispatches
+          .filter((dispatch) => dispatch.date === date && dispatch.productId === product.id)
+          .reduce((sum, dispatch) => sum + dispatch.quantity, 0);
+        const returnedQty = nextReturns
+          .filter((entry) => entry.date === date && entry.productId === product.id)
+          .reduce((sum, entry) => sum + entry.quantity, 0);
+        acc[product.id] = Math.max(0, dispatchedQty - returnedQty);
+        return acc;
+      }, {});
 
-    setQuantities(nextQuantities);
-  }, [date, products]);
+      setQuantities(nextQuantities);
+    };
+
+    void loadData();
+  }, [date]);
 
   const filteredProducts = useMemo(() => {
     const normalized = searchTerm.trim().toLowerCase();
@@ -42,7 +51,7 @@ export function EveningReturn() {
   const totalReturnQty = products.reduce((sum, product) => sum + Number(quantities[product.id] || 0), 0);
   const totalReturnAmount = products.reduce((sum, product) => sum + (Number(quantities[product.id] || 0) * product.sellingPrice), 0);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setErrorMessage('');
 
     const entries = products
@@ -51,14 +60,14 @@ export function EveningReturn() {
 
     if (!entries.length) return;
 
+    const [dispatches, returns] = await Promise.all([storage.getDispatches(), storage.getReturns()]);
+
     for (const item of entries) {
-      const dispatchedQty = storage
-        .getDispatches()
+      const dispatchedQty = dispatches
         .filter((dispatch) => dispatch.date === date && dispatch.productId === item.product.id)
         .reduce((sum, dispatch) => sum + dispatch.quantity, 0);
 
-      const returnedQty = storage
-        .getReturns()
+      const returnedQty = returns
         .filter((entry) => entry.date === date && entry.productId === item.product.id)
         .reduce((sum, entry) => sum + entry.quantity, 0);
 
@@ -69,16 +78,37 @@ export function EveningReturn() {
       }
     }
 
-    entries.forEach(({ product, quantity }) => {
-      storage.addReturn({
+    for (const { product, quantity } of entries) {
+      const saved = await storage.addReturn({
         date,
         productId: product.id,
         quantity,
         amount: quantity * product.sellingPrice,
       });
-    });
+      if (!saved) {
+        setErrorMessage(`Unable to save return for ${product.name}.`);
+        return;
+      }
+    }
 
     setSuccessMessage('Evening returns saved successfully.');
+    const [allProducts, nextDispatches, nextReturns] = await Promise.all([
+      storage.getProducts(),
+      storage.getDispatches(),
+      storage.getReturns(),
+    ]);
+    setProducts(allProducts);
+    const nextQuantities = allProducts.reduce<Record<string, number>>((acc, product) => {
+      const dispatchedQty = nextDispatches
+        .filter((dispatch) => dispatch.date === date && dispatch.productId === product.id)
+        .reduce((sum, dispatch) => sum + dispatch.quantity, 0);
+      const returnedQty = nextReturns
+        .filter((entry) => entry.date === date && entry.productId === product.id)
+        .reduce((sum, entry) => sum + entry.quantity, 0);
+      acc[product.id] = Math.max(0, dispatchedQty - returnedQty);
+      return acc;
+    }, {});
+    setQuantities(nextQuantities);
     setTimeout(() => setSuccessMessage(''), 2500);
   };
 
@@ -150,12 +180,10 @@ export function EveningReturn() {
         ) : (
           <div className="space-y-3">
             {filteredProducts.map((product) => {
-              const dispatchTotal = storage
-                .getDispatches()
+              const dispatchTotal = dispatches
                 .filter((dispatch) => dispatch.date === date && dispatch.productId === product.id)
                 .reduce((sum, dispatch) => sum + dispatch.quantity, 0);
-              const currentReturn = storage
-                .getReturns()
+              const currentReturn = returns
                 .filter((entry) => entry.date === date && entry.productId === product.id)
                 .reduce((sum, entry) => sum + entry.quantity, 0);
               const availableToReturn = Math.max(0, dispatchTotal - currentReturn);
@@ -217,7 +245,7 @@ export function EveningReturn() {
 
         <button
           type="button"
-          onClick={handleSave}
+          onClick={() => void handleSave()}
           className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3 font-medium text-slate-950 transition-colors hover:bg-orange-400"
         >
           <RotateCcw className="w-5 h-5" />

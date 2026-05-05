@@ -1,24 +1,30 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ReceiptText, Calendar, Search, DollarSign } from 'lucide-react';
 import { storage } from '../utils/storage';
-import { Product } from '../types';
+import { DailyOrder, Product } from '../types';
 
 export function NightSales() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [orders, setOrders] = useState<DailyOrder[]>([]);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
-    const allProducts = storage.getProducts();
-    setProducts(allProducts);
-    setQuantities(
-      allProducts.reduce<Record<string, number>>((acc, product) => {
-        acc[product.id] = 0;
-        return acc;
-      }, {}),
-    );
+    const loadData = async () => {
+      const [allProducts, allOrders] = await Promise.all([storage.getProducts(), storage.getOrders()]);
+      setProducts(allProducts);
+      setOrders(allOrders);
+      setQuantities(
+        allProducts.reduce<Record<string, number>>((acc, product) => {
+          acc[product.id] = 0;
+          return acc;
+        }, {}),
+      );
+    };
+
+    void loadData();
   }, []);
 
   const filteredProducts = useMemo(() => {
@@ -29,14 +35,14 @@ export function NightSales() {
 
   const totalSales = products.reduce((sum, product) => sum + (Number(quantities[product.id] || 0) * product.sellingPrice), 0);
   const totalQuantity = Object.values(quantities).reduce((sum, value) => sum + Number(value || 0), 0);
-  const orderTotals = storage.getOrders()
+  const orderTotals = orders
     .filter((order) => order.date === date)
     .reduce<Record<string, number>>((acc, order) => {
       acc[order.productId] = (acc[order.productId] || 0) + order.quantity;
       return acc;
     }, {});
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const entries = products
       .map((product) => ({ product, quantity: Number(quantities[product.id] || 0) }))
       .filter((item) => item.quantity > 0);
@@ -49,14 +55,14 @@ export function NightSales() {
       return;
     }
 
-    entries.forEach(({ product, quantity }) => {
-      storage.addSale({
+    await Promise.all(entries.map(({ product, quantity }) => {
+      return storage.addSale({
         date,
         productId: product.id,
         quantity,
         amount: quantity * product.sellingPrice,
       });
-    });
+    }));
 
     setSuccessMessage('Night sales recorded successfully.');
     setQuantities(
@@ -179,7 +185,7 @@ export function NightSales() {
 
         <button
           type="button"
-          onClick={handleSave}
+          onClick={() => void handleSave()}
           className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-fuchsia-500 px-6 py-3 font-medium text-white transition-colors hover:bg-fuchsia-400"
         >
           <DollarSign className="w-5 h-5" />

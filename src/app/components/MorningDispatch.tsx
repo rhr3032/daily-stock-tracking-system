@@ -11,23 +11,25 @@ export function MorningDispatch() {
   const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
-    const allProducts = storage.getProducts();
-    setProducts(allProducts);
-  }, []);
+    const loadData = async () => {
+      const [allProducts, allSales] = await Promise.all([storage.getProducts(), storage.getSales()]);
+      setProducts(allProducts);
 
-  useEffect(() => {
-    const selected = new Date(date);
-    selected.setDate(selected.getDate() - 1);
-    const previousDate = selected.toISOString().split('T')[0];
+      const selected = new Date(date);
+      selected.setDate(selected.getDate() - 1);
+      const previousDate = selected.toISOString().split('T')[0];
 
-    const previousSales = storage.getSales().filter((sale) => sale.date === previousDate);
-    setSales(previousSales);
-    setQuantities(
-      previousSales.reduce<Record<string, number>>((acc, sale) => {
-        acc[sale.productId] = (acc[sale.productId] || 0) + sale.quantity;
-        return acc;
-      }, {}),
-    );
+      const previousSales = allSales.filter((sale) => sale.date === previousDate);
+      setSales(previousSales);
+      setQuantities(
+        previousSales.reduce<Record<string, number>>((acc, sale) => {
+          acc[sale.productId] = (acc[sale.productId] || 0) + sale.quantity;
+          return acc;
+        }, {}),
+      );
+    };
+
+    void loadData();
   }, [date]);
 
   const suggestedTotal = useMemo(
@@ -35,7 +37,7 @@ export function MorningDispatch() {
     [quantities],
   );
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const items = Object.entries(quantities)
       .map(([productId, quantity]) => ({ productId, quantity: Number(quantity || 0) }))
       .filter((item) => item.quantity > 0);
@@ -53,15 +55,33 @@ export function MorningDispatch() {
       return;
     }
 
-    items.forEach((item) => {
-      storage.addDispatch({
+    for (const item of items) {
+      const saved = await storage.addDispatch({
         date,
         productId: item.productId,
         quantity: item.quantity,
       });
-    });
+      if (!saved) {
+        const product = products.find((entry) => entry.id === item.productId);
+        alert(`${product?.name || 'Unknown product'} does not have enough stock for dispatch.`);
+        return;
+      }
+    }
 
     setSuccessMessage('Morning dispatch saved successfully.');
+    const [allProducts, allSales] = await Promise.all([storage.getProducts(), storage.getSales()]);
+    setProducts(allProducts);
+    const selected = new Date(date);
+    selected.setDate(selected.getDate() - 1);
+    const previousDate = selected.toISOString().split('T')[0];
+    const previousSales = allSales.filter((sale) => sale.date === previousDate);
+    setSales(previousSales);
+    setQuantities(
+      previousSales.reduce<Record<string, number>>((acc, sale) => {
+        acc[sale.productId] = (acc[sale.productId] || 0) + sale.quantity;
+        return acc;
+      }, {}),
+    );
     setTimeout(() => setSuccessMessage(''), 2500);
   };
 
@@ -161,7 +181,7 @@ export function MorningDispatch() {
 
         <button
           type="button"
-          onClick={handleSave}
+          onClick={() => void handleSave()}
           className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 px-6 py-3 font-medium text-slate-950 transition-colors hover:bg-amber-400"
         >
           <ArrowRight className="w-5 h-5" />

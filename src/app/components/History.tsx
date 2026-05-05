@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Download, Filter, History as HistoryIcon } from 'lucide-react';
 import { storage } from '../utils/storage';
-import { Product } from '../types';
+import { DailyOrder, DailyReturn, DailySale, MorningDispatch, Product } from '../types';
 
 type LedgerType = 'all' | 'order' | 'dispatch' | 'sale' | 'return';
 
@@ -17,55 +17,68 @@ type LedgerRow = {
 
 export function History() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [orders, setOrders] = useState<DailyOrder[]>([]);
+  const [dispatches, setDispatches] = useState<MorningDispatch[]>([]);
+  const [sales, setSales] = useState<DailySale[]>([]);
+  const [returns, setReturns] = useState<DailyReturn[]>([]);
   const [typeFilter, setTypeFilter] = useState<LedgerType>('all');
   const [filterProduct, setFilterProduct] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
 
   useEffect(() => {
-    setProducts(storage.getProducts());
+    const loadHistory = async () => {
+      const data = await storage.getBootstrap();
+      setProducts(data.products);
+      setOrders(data.orders);
+      setDispatches(data.dispatches);
+      setSales(data.sales);
+      setReturns(data.returns);
+    };
+
+    void loadHistory();
   }, []);
 
   const logs = useMemo<LedgerRow[]>(() => {
-    const orders = storage.getOrdersWithProductNames().map((item) => ({
+    const orderRows = orders.map((item) => ({
       id: item.id,
       date: item.date,
       type: 'order' as const,
       productId: item.productId,
-      productName: item.productName || 'Unknown',
+      productName: products.find((product) => product.id === item.productId)?.name || 'Unknown',
       quantity: item.quantity,
       amount: item.quantity * (products.find((product) => product.id === item.productId)?.sellingPrice || 0),
     }));
-    const dispatches = storage.getDispatchesWithProductNames().map((item) => ({
+    const dispatchRows = dispatches.map((item) => ({
       id: item.id,
       date: item.date,
       type: 'dispatch' as const,
       productId: item.productId,
-      productName: item.productName || 'Unknown',
+      productName: products.find((product) => product.id === item.productId)?.name || 'Unknown',
       quantity: item.quantity,
       amount: item.quantity * (products.find((product) => product.id === item.productId)?.purchasePrice || 0),
     }));
-    const sales = storage.getSalesWithProductNames().map((item) => ({
+    const saleRows = sales.map((item) => ({
       id: item.id,
       date: item.date,
       type: 'sale' as const,
       productId: item.productId,
-      productName: item.productName || 'Unknown',
+      productName: products.find((product) => product.id === item.productId)?.name || 'Unknown',
       quantity: item.quantity,
       amount: item.amount,
     }));
-    const returns = storage.getReturnsWithProductNames().map((item) => ({
+    const returnRows = returns.map((item) => ({
       id: item.id,
       date: item.date,
       type: 'return' as const,
       productId: item.productId,
-      productName: item.productName || 'Unknown',
+      productName: products.find((product) => product.id === item.productId)?.name || 'Unknown',
       quantity: item.quantity,
       amount: item.amount,
     }));
 
-    return [...orders, ...dispatches, ...sales, ...returns].sort((a, b) => b.date.localeCompare(a.date));
-  }, [products]);
+    return [...orderRows, ...dispatchRows, ...saleRows, ...returnRows].sort((a, b) => b.date.localeCompare(a.date));
+  }, [dispatches, orders, products, returns, sales]);
 
   const filteredLogs = logs.filter((log) => {
     if (typeFilter !== 'all' && log.type !== typeFilter) return false;

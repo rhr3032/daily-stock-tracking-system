@@ -11,14 +11,18 @@ export function DailyEntry() {
   const [successMessage, setSuccessMessage] = useState('');
 
   useEffect(() => {
-    const allProducts = storage.getProducts();
-    setProducts(allProducts);
-    setQuantities(
-      allProducts.reduce<Record<string, number>>((acc, product) => {
-        acc[product.id] = 0;
-        return acc;
-      }, {}),
-    );
+    const loadProducts = async () => {
+      const allProducts = await storage.getProducts();
+      setProducts(allProducts);
+      setQuantities(
+        allProducts.reduce<Record<string, number>>((acc, product) => {
+          acc[product.id] = 0;
+          return acc;
+        }, {}),
+      );
+    };
+
+    void loadProducts();
   }, []);
 
   const filteredProducts = useMemo(() => {
@@ -30,7 +34,7 @@ export function DailyEntry() {
   const totalOrdered = Object.values(quantities).reduce((sum, value) => sum + Number(value || 0), 0);
   const totalValue = products.reduce((sum, product) => sum + (Number(quantities[product.id] || 0) * product.sellingPrice), 0);
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const entries = products
       .map((product) => ({ product, quantity: Number(quantities[product.id] || 0) }))
       .filter((item) => item.quantity > 0);
@@ -39,13 +43,13 @@ export function DailyEntry() {
       return;
     }
 
-    entries.forEach(({ product, quantity }) => {
-      storage.addOrder({
+    await Promise.all(entries.map(({ product, quantity }) => {
+      return storage.addOrder({
         date,
         productId: product.id,
         quantity,
       });
-    });
+    }));
 
     setSuccessMessage('Daily orders saved successfully.');
     setQuantities(
@@ -172,7 +176,7 @@ export function DailyEntry() {
 
         <button
           type="button"
-          onClick={handleSave}
+          onClick={() => void handleSave()}
           className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-cyan-500 px-6 py-3 font-medium text-slate-950 transition-colors hover:bg-cyan-400"
         >
           <ClipboardList className="w-5 h-5" />
