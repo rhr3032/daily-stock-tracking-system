@@ -1,181 +1,228 @@
-import { useEffect, useState } from 'react';
-import { Calendar, RotateCcw } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Calendar, RotateCcw, Search } from 'lucide-react';
 import { storage } from '../utils/storage';
-import { DailyLog, Product } from '../types';
+import { Product } from '../types';
 
 export function EveningReturn() {
   const [products, setProducts] = useState<Product[]>([]);
-  const [logs, setLogs] = useState<DailyLog[]>([]);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
-  const [returnsMap, setReturnsMap] = useState<Record<string, number>>({});
-  const [errorMessage, setErrorMessage] = useState('');
+  const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [searchTerm, setSearchTerm] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
-    loadData(date);
-  }, [date]);
+    setProducts(storage.getProducts());
+  }, []);
 
-  const loadData = (selectedDate: string) => {
-    const allProducts = storage.getProducts();
-    const dayLogs = storage
-      .getLogs()
-      .filter(log => log.date.startsWith(selectedDate))
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  useEffect(() => {
+    const dispatches = storage.getDispatches().filter((dispatch) => dispatch.date === date);
+    const returns = storage.getReturns().filter((entry) => entry.date === date);
 
-    setProducts(allProducts);
-    setLogs(dayLogs);
+    const nextQuantities = products.reduce<Record<string, number>>((acc, product) => {
+      const dispatchedQty = dispatches
+        .filter((dispatch) => dispatch.productId === product.id)
+        .reduce((sum, dispatch) => sum + dispatch.quantity, 0);
+      const returnedQty = returns
+        .filter((entry) => entry.productId === product.id)
+        .reduce((sum, entry) => sum + entry.quantity, 0);
+      acc[product.id] = Math.max(0, dispatchedQty - returnedQty);
+      return acc;
+    }, {});
 
-    const nextMap: Record<string, number> = {};
-    dayLogs.forEach(log => {
-      nextMap[log.id] = log.returnedQty;
-    });
-    setReturnsMap(nextMap);
-  };
+    setQuantities(nextQuantities);
+  }, [date, products]);
 
-  const handleSaveReturns = () => {
+  const filteredProducts = useMemo(() => {
+    const normalized = searchTerm.trim().toLowerCase();
+    if (!normalized) return products;
+    return products.filter((product) => product.name.toLowerCase().includes(normalized));
+  }, [products, searchTerm]);
+
+  const totalReturnQty = products.reduce((sum, product) => sum + Number(quantities[product.id] || 0), 0);
+  const totalReturnAmount = products.reduce((sum, product) => sum + (Number(quantities[product.id] || 0) * product.sellingPrice), 0);
+
+  const handleSave = () => {
     setErrorMessage('');
 
-    for (const log of logs) {
-      const returnedQty = Number(returnsMap[log.id] ?? 0);
-      if (returnedQty < 0) {
-        setErrorMessage('Returned quantity cannot be negative.');
-        return;
-      }
-      if (returnedQty > log.orderedQty) {
-        setErrorMessage(`Returned quantity cannot be greater than ordered quantity for ${getProductName(log.productId)}.`);
+    const entries = products
+      .map((product) => ({ product, quantity: Number(quantities[product.id] || 0) }))
+      .filter((item) => item.quantity > 0);
+
+    if (!entries.length) return;
+
+    for (const item of entries) {
+      const dispatchedQty = storage
+        .getDispatches()
+        .filter((dispatch) => dispatch.date === date && dispatch.productId === item.product.id)
+        .reduce((sum, dispatch) => sum + dispatch.quantity, 0);
+
+      const returnedQty = storage
+        .getReturns()
+        .filter((entry) => entry.date === date && entry.productId === item.product.id)
+        .reduce((sum, entry) => sum + entry.quantity, 0);
+
+      const remaining = dispatchedQty - returnedQty;
+      if (item.quantity > remaining) {
+        setErrorMessage(`Return quantity for ${item.product.name} exceeds the dispatched balance.`);
         return;
       }
     }
 
-    logs.forEach(log => {
-      const returnedQty = Number(returnsMap[log.id] ?? 0);
-      storage.updateLogReturnedQuantity(log.id, returnedQty);
+    entries.forEach(({ product, quantity }) => {
+      storage.addReturn({
+        date,
+        productId: product.id,
+        quantity,
+        amount: quantity * product.sellingPrice,
+      });
     });
 
-    loadData(date);
-    setSuccessMessage('Evening returns updated successfully!');
-    setTimeout(() => setSuccessMessage(''), 3000);
-  };
-
-  const getProductName = (productId: string) => {
-    const product = products.find(item => item.id === productId);
-    if (!product) return 'Unknown Product';
-    return `${product.name}${product.sizeUnit ? ` (${product.sizeUnit})` : ''}`;
+    setSuccessMessage('Evening returns saved successfully.');
+    setTimeout(() => setSuccessMessage(''), 2500);
   };
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="mb-2">Evening Returns</h1>
-        <p className="text-gray-600">Record returned quantities after evening count</p>
+        <h1 className="mb-2 text-3xl font-semibold text-white">Afternoon Return Entry</h1>
+        <p className="text-slate-400">Record returned goods and automatically restore stock.</p>
       </div>
 
       {successMessage && (
-        <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg">
-          {successMessage}
-        </div>
+        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-emerald-200">{successMessage}</div>
       )}
 
       {errorMessage && (
-        <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg">
-          {errorMessage}
-        </div>
+        <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-rose-200">{errorMessage}</div>
       )}
 
-      <div className="bg-white rounded-lg shadow p-6 space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="bg-orange-50 p-3 rounded-lg">
-            <Calendar className="w-6 h-6 text-orange-600" />
+      <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-6 shadow-xl shadow-black/20 backdrop-blur">
+        <div className="mb-6 flex items-center gap-3">
+          <div className="rounded-xl bg-orange-500/15 p-3">
+            <Calendar className="w-6 h-6 text-orange-300" />
           </div>
           <div>
-            <h2 className="font-semibold">Select Date</h2>
-            <p className="text-sm text-gray-600">Choose a date to update returns</p>
+            <h2 className="font-semibold text-white">Select Date</h2>
+            <p className="text-sm text-slate-400">Returns are validated against the dispatch balance for the selected day.</p>
           </div>
         </div>
 
-        <div className="max-w-sm">
-          <label className="block text-sm font-medium text-gray-700 mb-2">Date</label>
-          <input
-            type="date"
-            value={date}
-            onChange={(event) => setDate(event.target.value)}
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-          />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-300">Date</label>
+            <input
+              type="date"
+              value={date}
+              onChange={(event) => setDate(event.target.value)}
+              title="Return date"
+              className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white focus:border-orange-400 focus:outline-none"
+            />
+          </div>
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-300">Search Products</label>
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+              <input
+                value={searchTerm}
+                onChange={(event) => setSearchTerm(event.target.value)}
+                placeholder="Search by name"
+                className="w-full rounded-xl border border-white/10 bg-slate-950 py-3 pl-10 pr-4 text-white placeholder:text-slate-500 focus:border-orange-400 focus:outline-none"
+              />
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow p-6 space-y-4">
-        <div className="flex items-center gap-3">
-          <div className="bg-blue-50 p-3 rounded-lg">
-            <RotateCcw className="w-6 h-6 text-blue-600" />
+      <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-6 shadow-xl shadow-black/20 backdrop-blur">
+        <div className="mb-6 flex items-center gap-3">
+          <div className="rounded-xl bg-blue-500/15 p-3">
+            <RotateCcw className="w-6 h-6 text-blue-300" />
           </div>
           <div>
-            <h2 className="font-semibold">Returned Quantity (Evening)</h2>
-            <p className="text-sm text-gray-600">Set returned quantities for each morning entry</p>
+            <h2 className="font-semibold text-white">Returned Goods</h2>
+            <p className="text-sm text-slate-400">Enter the product-wise returned quantities for the selected date.</p>
           </div>
         </div>
 
-        {logs.length === 0 ? (
-          <p className="text-gray-500 text-center py-8">No morning entries found for selected date</p>
+        {filteredProducts.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-white/10 py-10 text-center text-slate-400">No products available</p>
         ) : (
           <div className="space-y-3">
-            {logs.map(log => (
-              <div key={log.id} className="border border-gray-200 rounded-lg p-4">
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
-                  <div>
-                    <p className="text-sm text-gray-600 mb-1">Product</p>
-                    <p className="font-medium">{getProductName(log.productId)}</p>
+            {filteredProducts.map((product) => {
+              const dispatchTotal = storage
+                .getDispatches()
+                .filter((dispatch) => dispatch.date === date && dispatch.productId === product.id)
+                .reduce((sum, dispatch) => sum + dispatch.quantity, 0);
+              const currentReturn = storage
+                .getReturns()
+                .filter((entry) => entry.date === date && entry.productId === product.id)
+                .reduce((sum, entry) => sum + entry.quantity, 0);
+              const availableToReturn = Math.max(0, dispatchTotal - currentReturn);
+              const quantity = quantities[product.id] ?? availableToReturn;
+
+              return (
+                <div key={product.id} className="rounded-xl border border-white/10 bg-white/5 p-4">
+                  <div className="mb-2 flex items-start justify-between gap-4">
+                    <div>
+                      <p className="font-medium text-white">{product.name}</p>
+                      <p className="text-sm text-slate-400">Available to return: {availableToReturn.toLocaleString()} · Return value uses selling price</p>
+                    </div>
+                    <div className="text-right text-xs text-slate-400">Current stock: {product.currentStock}</div>
                   </div>
-                  <div>
-                    <p className="text-sm text-gray-600 mb-1">Ordered (Morning)</p>
-                    <p className="font-medium">{log.orderedQty.toLocaleString()}</p>
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-600 mb-1">Returned (Evening)</label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={log.orderedQty}
-                      value={returnsMap[log.id] ?? 0}
-                      onChange={(event) => {
-                        setReturnsMap(prev => ({
-                          ...prev,
-                          [log.id]: Number(event.target.value),
-                        }));
-                      }}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent"
-                    />
-                  </div>
-                  <div>
-                    <p className="text-sm text-gray-600 mb-1">Sold (Auto)</p>
-                    <p className="font-semibold text-green-700">
-                      {Math.max(0, log.orderedQty - Number(returnsMap[log.id] ?? 0)).toLocaleString()}
-                    </p>
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                    <div>
+                      <label className="mb-1 block text-xs font-medium text-slate-400">Returned Quantity</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={availableToReturn}
+                        value={quantity}
+                        onChange={(event) =>
+                          setQuantities((prev) => ({
+                            ...prev,
+                            [product.id]: Number(event.target.value),
+                          }))
+                        }
+                        title={`${product.name} return quantity`}
+                        placeholder="0"
+                        className="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-white focus:border-orange-400 focus:outline-none"
+                      />
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-slate-950 px-4 py-3">
+                      <p className="text-xs text-slate-400">Return Amount</p>
+                      <p className="text-lg font-semibold text-white">৳{(Number(quantity || 0) * product.sellingPrice).toLocaleString()}</p>
+                    </div>
+                    <div className="rounded-xl border border-white/10 bg-slate-950 px-4 py-3">
+                      <p className="text-xs text-slate-400">Stock After Return</p>
+                      <p className="text-lg font-semibold text-white">{(product.currentStock + Number(quantity || 0)).toLocaleString()}</p>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
-
-            <button
-              onClick={handleSaveReturns}
-              className="w-full bg-orange-600 text-white px-6 py-3 rounded-lg hover:bg-orange-700 transition-colors font-medium"
-            >
-              Save Evening Returns
-            </button>
+              );
+            })}
           </div>
         )}
-      </div>
 
-      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
-        <p className="text-sm font-medium text-gray-700 mb-3">Available Stock by Product</p>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-          {products.map((product) => (
-            <div key={product.id} className="flex items-center justify-between bg-white rounded px-3 py-2">
-              <span className="text-gray-700">{product.name}{product.sizeUnit ? ` (${product.sizeUnit})` : ''}</span>
-              <span className="font-semibold">{product.currentStock.toLocaleString()}</span>
-            </div>
-          ))}
+        <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+            <p className="text-sm text-slate-400">Total Returned Quantity</p>
+            <p className="mt-1 text-2xl font-semibold text-white">{totalReturnQty.toLocaleString()}</p>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+            <p className="text-sm text-slate-400">Total Return Amount</p>
+            <p className="mt-1 text-2xl font-semibold text-white">৳{totalReturnAmount.toLocaleString()}</p>
+          </div>
         </div>
+
+        <button
+          type="button"
+          onClick={handleSave}
+          className="mt-6 flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 px-6 py-3 font-medium text-slate-950 transition-colors hover:bg-orange-400"
+        >
+          <RotateCcw className="w-5 h-5" />
+          Save Returns
+        </button>
       </div>
     </div>
   );

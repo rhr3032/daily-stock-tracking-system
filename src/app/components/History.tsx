@@ -1,71 +1,103 @@
-import { useState, useEffect } from 'react';
-import { History as HistoryIcon, Filter, Download } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Download, Filter, History as HistoryIcon } from 'lucide-react';
 import { storage } from '../utils/storage';
-import { DailyLog, Product } from '../types';
+import { Product } from '../types';
+
+type LedgerType = 'all' | 'order' | 'dispatch' | 'sale' | 'return';
+
+type LedgerRow = {
+  id: string;
+  date: string;
+  type: LedgerType;
+  productId: string;
+  productName: string;
+  quantity: number;
+  amount: number;
+};
 
 export function History() {
-  const [logs, setLogs] = useState<DailyLog[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [typeFilter, setTypeFilter] = useState<LedgerType>('all');
   const [filterProduct, setFilterProduct] = useState('');
   const [filterDateFrom, setFilterDateFrom] = useState('');
   const [filterDateTo, setFilterDateTo] = useState('');
 
   useEffect(() => {
-    loadData();
+    setProducts(storage.getProducts());
   }, []);
 
-  const loadData = () => {
-    const allLogs = storage.getLogsWithProductNames();
-    setLogs(allLogs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()));
-    setProducts(storage.getProducts());
-  };
+  const logs = useMemo<LedgerRow[]>(() => {
+    const orders = storage.getOrdersWithProductNames().map((item) => ({
+      id: item.id,
+      date: item.date,
+      type: 'order' as const,
+      productId: item.productId,
+      productName: item.productName || 'Unknown',
+      quantity: item.quantity,
+      amount: item.quantity * (products.find((product) => product.id === item.productId)?.sellingPrice || 0),
+    }));
+    const dispatches = storage.getDispatchesWithProductNames().map((item) => ({
+      id: item.id,
+      date: item.date,
+      type: 'dispatch' as const,
+      productId: item.productId,
+      productName: item.productName || 'Unknown',
+      quantity: item.quantity,
+      amount: item.quantity * (products.find((product) => product.id === item.productId)?.purchasePrice || 0),
+    }));
+    const sales = storage.getSalesWithProductNames().map((item) => ({
+      id: item.id,
+      date: item.date,
+      type: 'sale' as const,
+      productId: item.productId,
+      productName: item.productName || 'Unknown',
+      quantity: item.quantity,
+      amount: item.amount,
+    }));
+    const returns = storage.getReturnsWithProductNames().map((item) => ({
+      id: item.id,
+      date: item.date,
+      type: 'return' as const,
+      productId: item.productId,
+      productName: item.productName || 'Unknown',
+      quantity: item.quantity,
+      amount: item.amount,
+    }));
 
-  const filteredLogs = logs.filter(log => {
+    return [...orders, ...dispatches, ...sales, ...returns].sort((a, b) => b.date.localeCompare(a.date));
+  }, [products]);
+
+  const filteredLogs = logs.filter((log) => {
+    if (typeFilter !== 'all' && log.type !== typeFilter) return false;
     if (filterProduct && log.productId !== filterProduct) return false;
     if (filterDateFrom && log.date < filterDateFrom) return false;
     if (filterDateTo && log.date > filterDateTo) return false;
     return true;
   });
 
-  const totalSales = filteredLogs.reduce((sum, log) => sum + log.soldValue, 0);
-  const totalSold = filteredLogs.reduce((sum, log) => sum + log.soldQty, 0);
-
-  const getAvailableStock = (productId: string) => {
-    const product = products.find((item) => item.id === productId);
-    return product ? product.currentStock : 0;
-  };
-
   const exportToCSV = () => {
-    const headers = ['Date', 'Product', 'Ordered', 'Returned', 'Sold', 'Value (৳)'];
-    const rows = filteredLogs.map(log => [
-      log.date,
-      log.productName || 'Unknown',
-      log.orderedQty,
-      log.returnedQty,
-      log.soldQty,
-      log.soldValue.toFixed(2),
-    ]);
-
-    const csv = [headers, ...rows].map(row => row.join(',')).join('\n');
+    const headers = ['Date', 'Type', 'Product', 'Quantity', 'Amount (৳)'];
+    const rows = filteredLogs.map((log) => [log.date, log.type, log.productName, log.quantity, log.amount.toFixed(2)]);
+    const csv = [headers, ...rows].map((row) => row.join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `stock-history-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `stock-ledger-${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
     URL.revokeObjectURL(url);
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="mb-2">Sales History</h1>
-          <p className="text-gray-600">View and filter past transactions</p>
+          <h1 className="mb-2 text-3xl font-semibold text-white">Activity History</h1>
+          <p className="text-slate-400">Search across orders, dispatches, sales, and returns.</p>
         </div>
         <button
           onClick={exportToCSV}
-          className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors"
+          className="flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 font-medium text-slate-950 transition-colors hover:bg-emerald-400 disabled:opacity-50"
           disabled={filteredLogs.length === 0}
         >
           <Download className="w-5 h-5" />
@@ -73,137 +105,91 @@ export function History() {
         </button>
       </div>
 
-      <div className="bg-white rounded-lg shadow p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="bg-blue-50 p-3 rounded-lg">
-            <Filter className="w-6 h-6 text-blue-600" />
+      <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-6 shadow-xl shadow-black/20 backdrop-blur">
+        <div className="mb-6 flex items-center gap-3">
+          <div className="rounded-xl bg-cyan-500/15 p-3">
+            <Filter className="w-6 h-6 text-cyan-300" />
           </div>
           <div>
-            <h2 className="font-semibold">Filters</h2>
-            <p className="text-sm text-gray-600">Filter transactions by date and product</p>
+            <h2 className="font-semibold text-white">Filters</h2>
+            <p className="text-sm text-slate-400">Narrow records by product, type, or date range.</p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Product
-            </label>
-            <select
-              value={filterProduct}
-              onChange={(e) => setFilterProduct(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
+            <label className="mb-2 block text-sm font-medium text-slate-300">Type</label>
+            <select title="Record type" value={typeFilter} onChange={(event) => setTypeFilter(event.target.value as LedgerType)} className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white focus:border-cyan-400 focus:outline-none">
+              <option value="all">All</option>
+              <option value="order">Orders</option>
+              <option value="dispatch">Dispatches</option>
+              <option value="sale">Sales</option>
+              <option value="return">Returns</option>
+            </select>
+          </div>
+          <div>
+            <label className="mb-2 block text-sm font-medium text-slate-300">Product</label>
+            <select title="Filter by product" value={filterProduct} onChange={(event) => setFilterProduct(event.target.value)} className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white focus:border-cyan-400 focus:outline-none">
               <option value="">All Products</option>
               {products.map((product) => (
-                <option key={product.id} value={product.id}>
-                  {product.name}
-                </option>
+                <option key={product.id} value={product.id}>{product.name}</option>
               ))}
             </select>
           </div>
-
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              From Date
-            </label>
-            <input
-              type="date"
-              value={filterDateFrom}
-              onChange={(e) => setFilterDateFrom(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
+            <label className="mb-2 block text-sm font-medium text-slate-300">From</label>
+            <input type="date" value={filterDateFrom} onChange={(event) => setFilterDateFrom(event.target.value)} title="From date" className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white focus:border-cyan-400 focus:outline-none" />
           </div>
-
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              To Date
-            </label>
-            <input
-              type="date"
-              value={filterDateTo}
-              onChange={(e) => setFilterDateTo(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            />
+            <label className="mb-2 block text-sm font-medium text-slate-300">To</label>
+            <input type="date" value={filterDateTo} onChange={(event) => setFilterDateTo(event.target.value)} title="To date" className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white focus:border-cyan-400 focus:outline-none" />
           </div>
-        </div>
-
-        {(filterProduct || filterDateFrom || filterDateTo) && (
-          <button
-            onClick={() => {
-              setFilterProduct('');
-              setFilterDateFrom('');
-              setFilterDateTo('');
-            }}
-            className="mt-4 text-blue-600 hover:text-blue-700 text-sm font-medium"
-          >
-            Clear Filters
-          </button>
-        )}
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-gradient-to-br from-purple-50 to-purple-100 border border-purple-200 rounded-lg p-6">
-          <p className="text-sm text-purple-800 mb-1">Total Quantity Sold</p>
-          <p className="text-3xl font-bold text-purple-900">{totalSold.toLocaleString()}</p>
-        </div>
-        <div className="bg-gradient-to-br from-green-50 to-green-100 border border-green-200 rounded-lg p-6">
-          <p className="text-sm text-green-800 mb-1">Total Sales Value</p>
-          <p className="text-3xl font-bold text-green-900">৳{totalSales.toLocaleString()}</p>
         </div>
       </div>
 
-      <div className="bg-white rounded-lg shadow overflow-hidden">
-        <div className="p-6 border-b">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3\">
+        <SummaryCard label="Entries" value={filteredLogs.length} />
+        <SummaryCard label="Total Quantity" value={filteredLogs.reduce((sum, item) => sum + item.quantity, 0)} />
+        <SummaryCard label="Total Amount" value={`৳${filteredLogs.reduce((sum, item) => sum + item.amount, 0).toLocaleString()}`} />
+      </div>
+
+      <div className="rounded-2xl border border-white/10 bg-slate-900/80 shadow-xl shadow-black/20 backdrop-blur">
+        <div className="border-b border-white/10 p-6">
           <div className="flex items-center gap-3">
-            <div className="bg-orange-50 p-3 rounded-lg">
-              <HistoryIcon className="w-6 h-6 text-orange-600" />
+            <div className="rounded-xl bg-orange-500/15 p-3">
+              <HistoryIcon className="w-6 h-6 text-orange-300" />
             </div>
             <div>
-              <h2 className="font-semibold">Transaction Log</h2>
-              <p className="text-sm text-gray-600">{filteredLogs.length} entries found</p>
+              <h2 className="font-semibold text-white">Ledger</h2>
+              <p className="text-sm text-slate-400">{filteredLogs.length} records found</p>
             </div>
           </div>
         </div>
 
         {filteredLogs.length === 0 ? (
-          <p className="text-gray-500 text-center py-12">No transactions found</p>
+          <p className="py-12 text-center text-slate-400">No records found</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
+            <table className="w-full min-w-[760px]">
+              <thead className="bg-white/5 text-left text-sm text-slate-400">
                 <tr>
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Date</th>
-                  <th className="text-left py-3 px-4 font-medium text-gray-700">Product</th>
-                  <th className="text-right py-3 px-4 font-medium text-gray-700">Ordered</th>
-                  <th className="text-right py-3 px-4 font-medium text-gray-700">Returned</th>
-                  <th className="text-right py-3 px-4 font-medium text-gray-700">Sold</th>
-                  <th className="text-right py-3 px-4 font-medium text-gray-700">Available Stock</th>
-                  <th className="text-right py-3 px-4 font-medium text-gray-700">Value</th>
+                  <th className="py-3 px-4">Date</th>
+                  <th className="py-3 px-4">Type</th>
+                  <th className="py-3 px-4">Product</th>
+                  <th className="py-3 px-4 text-right">Quantity</th>
+                  <th className="py-3 px-4 text-right">Amount</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredLogs.map((log) => (
-                  <tr key={log.id} className="border-b hover:bg-gray-50">
+                  <tr key={log.type + log.id} className="border-b border-white/5 hover:bg-white/5">
+                    <td className="py-3 px-4 text-slate-300">{log.date}</td>
                     <td className="py-3 px-4">
-                      {new Date(log.date).toLocaleDateString('en-GB')}
+                      <span className={`rounded-full px-3 py-1 text-xs font-medium ${typeBadgeClass(log.type)}`}>{log.type}</span>
                     </td>
-                    <td className="py-3 px-4">{log.productName}</td>
-                    <td className="py-3 px-4 text-right text-blue-600 font-medium">
-                      {log.orderedQty.toLocaleString()}
-                    </td>
-                    <td className="py-3 px-4 text-right text-orange-600 font-medium">
-                      {log.returnedQty.toLocaleString()}
-                    </td>
-                    <td className="py-3 px-4 text-right text-green-600 font-medium">
-                      {log.soldQty.toLocaleString()}
-                    </td>
-                    <td className="py-3 px-4 text-right font-medium text-blue-700">
-                      {getAvailableStock(log.productId).toLocaleString()}
-                    </td>
-                    <td className="py-3 px-4 text-right font-semibold">
-                      ৳{log.soldValue.toLocaleString()}
-                    </td>
+                    <td className="py-3 px-4 text-white">{log.productName}</td>
+                    <td className="py-3 px-4 text-right text-white">{log.quantity.toLocaleString()}</td>
+                    <td className="py-3 px-4 text-right text-white">৳{log.amount.toLocaleString()}</td>
                   </tr>
                 ))}
               </tbody>
@@ -213,4 +199,28 @@ export function History() {
       </div>
     </div>
   );
+}
+
+function SummaryCard({ label, value }: { label: string; value: number | string }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-6 shadow-xl shadow-black/20 backdrop-blur">
+      <p className="text-sm text-slate-400">{label}</p>
+      <p className="mt-2 text-2xl font-semibold text-white">{value}</p>
+    </div>
+  );
+}
+
+function typeBadgeClass(type: LedgerType) {
+  switch (type) {
+    case 'order':
+      return 'bg-cyan-500/15 text-cyan-300';
+    case 'dispatch':
+      return 'bg-amber-500/15 text-amber-300';
+    case 'sale':
+      return 'bg-emerald-500/15 text-emerald-300';
+    case 'return':
+      return 'bg-rose-500/15 text-rose-300';
+    default:
+      return 'bg-white/10 text-slate-200';
+  }
 }

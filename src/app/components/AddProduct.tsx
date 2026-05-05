@@ -1,13 +1,16 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { Package, Plus, Edit, Trash2 } from 'lucide-react';
+import { Package, Plus, Edit, Trash2, Search, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { storage } from '../utils/storage';
+import { Product } from '../types';
 
 interface ProductFormData {
   name: string;
-  sizeUnit: string;
+  unit: string;
+  purchasePrice: number;
+  sellingPrice: number;
   totalQuantity: number;
-  totalCost: number;
+  lowStockThreshold: number;
 }
 
 interface AddProductProps {
@@ -17,44 +20,49 @@ interface AddProductProps {
 export function AddProduct({ onSuccess }: AddProductProps) {
   const [showForm, setShowForm] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
-  const { register, handleSubmit, watch, reset, formState: { errors } } = useForm<ProductFormData>();
+  const [searchTerm, setSearchTerm] = useState('');
+  const { register, handleSubmit, watch, reset, formState: { errors } } = useForm<ProductFormData>({
+    defaultValues: {
+      lowStockThreshold: 10,
+    },
+  });
 
-  const totalQuantity = watch('totalQuantity');
-  const totalCost = watch('totalCost');
-  const unitCost = totalQuantity && totalCost ? (totalCost / totalQuantity).toFixed(2) : '0.00';
+  const totalQuantity = watch('totalQuantity') || 0;
+  const purchasePrice = watch('purchasePrice') || 0;
+  const sellingPrice = watch('sellingPrice') || 0;
+  const grossProfitPerUnit = sellingPrice - purchasePrice;
 
   const onSubmit = (data: ProductFormData) => {
-    const unitCost = data.totalCost / data.totalQuantity;
-
     storage.addProduct({
       name: data.name,
-      sizeUnit: data.sizeUnit,
+      unit: data.unit,
+      purchasePrice: data.purchasePrice,
+      sellingPrice: data.sellingPrice,
       totalQuantity: data.totalQuantity,
-      totalCost: data.totalCost,
-      unitCost: unitCost,
       currentStock: data.totalQuantity,
+      lowStockThreshold: data.lowStockThreshold,
     });
 
     setSuccessMessage(`${data.name} added successfully!`);
-    reset();
+    reset({ lowStockThreshold: 10 });
     setTimeout(() => {
       setSuccessMessage('');
       setShowForm(false);
       onSuccess?.();
-    }, 2000);
+    }, 1600);
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="mb-2">Add Product</h1>
-          <p className="text-gray-600">Add a new product to your inventory</p>
+          <h1 className="mb-2 text-3xl font-semibold text-white">Initial Stock Setup</h1>
+          <p className="text-slate-400">Register products with purchase price, selling price, and opening inventory.</p>
         </div>
         {!showForm && (
           <button
             onClick={() => setShowForm(true)}
-            className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+            className="flex items-center gap-2 rounded-xl bg-emerald-500 px-4 py-2 font-medium text-slate-950 transition-colors hover:bg-emerald-400"
           >
             <Plus className="w-5 h-5" />
             New Product
@@ -63,102 +71,129 @@ export function AddProduct({ onSuccess }: AddProductProps) {
       </div>
 
       {successMessage && (
-        <div className="bg-green-50 border border-green-200 text-green-800 px-4 py-3 rounded-lg">
+        <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-emerald-200">
           {successMessage}
         </div>
       )}
 
       {showForm && (
-        <div className="bg-white rounded-lg shadow p-6">
-          <div className="flex items-center gap-3 mb-6">
-            <div className="bg-blue-50 p-3 rounded-lg">
-              <Package className="w-6 h-6 text-blue-600" />
+        <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-6 shadow-xl shadow-black/20 backdrop-blur">
+          <div className="mb-6 flex items-center gap-3">
+            <div className="rounded-xl bg-cyan-500/15 p-3">
+              <Package className="w-6 h-6 text-cyan-300" />
             </div>
             <div>
-              <h2 className="font-semibold">Product Details</h2>
-              <p className="text-sm text-gray-600">Enter the product information</p>
+              <h2 className="font-semibold text-white">Product Details</h2>
+              <p className="text-sm text-slate-400">Enter the opening inventory and pricing structure.</p>
             </div>
           </div>
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Product Name
-              </label>
+              <label className="mb-2 block text-sm font-medium text-slate-300">Product Name</label>
               <input
                 type="text"
                 {...register('name', { required: 'Product name is required' })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none"
                 placeholder="e.g., Rice Bag"
               />
-              {errors.name && (
-                <p className="text-red-500 text-sm mt-1">{errors.name.message}</p>
-              )}
+              {errors.name && <p className="mt-1 text-sm text-rose-400">{errors.name.message}</p>}
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Product Size/Unit
-              </label>
+              <label className="mb-2 block text-sm font-medium text-slate-300">Product Unit</label>
               <input
                 type="text"
-                {...register('sizeUnit', { required: 'Product size/unit is required' })}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="e.g., kg, ml, liter"
+                {...register('unit', { required: 'Product unit is required' })}
+                className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none"
+                placeholder="e.g., kg, pcs, bottle"
               />
-              {errors.sizeUnit && (
-                <p className="text-red-500 text-sm mt-1">{errors.sizeUnit.message}</p>
-              )}
+              {errors.unit && <p className="mt-1 text-sm text-rose-400">{errors.unit.message}</p>}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Total Quantity (pcs)
-                </label>
+                <label className="mb-2 block text-sm font-medium text-slate-300">Purchase Price (৳)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  {...register('purchasePrice', {
+                    required: 'Purchase price is required',
+                    min: { value: 0.01, message: 'Purchase price must be greater than 0' },
+                  })}
+                  className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none"
+                  placeholder="e.g., 120"
+                />
+                {errors.purchasePrice && <p className="mt-1 text-sm text-rose-400">{errors.purchasePrice.message}</p>}
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-300">Selling Price (৳)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  {...register('sellingPrice', {
+                    required: 'Selling price is required',
+                    min: { value: 0.01, message: 'Selling price must be greater than 0' },
+                  })}
+                  className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none"
+                  placeholder="e.g., 160"
+                />
+                {errors.sellingPrice && <p className="mt-1 text-sm text-rose-400">{errors.sellingPrice.message}</p>}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <label className="mb-2 block text-sm font-medium text-slate-300">Opening Quantity</label>
                 <input
                   type="number"
                   {...register('totalQuantity', {
                     required: 'Quantity is required',
                     min: { value: 1, message: 'Quantity must be at least 1' },
                   })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none"
                   placeholder="e.g., 1000"
                 />
-                {errors.totalQuantity && (
-                  <p className="text-red-500 text-sm mt-1">{errors.totalQuantity.message}</p>
-                )}
+                {errors.totalQuantity && <p className="mt-1 text-sm text-rose-400">{errors.totalQuantity.message}</p>}
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Total Cost (৳)
-                </label>
+                <label className="mb-2 block text-sm font-medium text-slate-300">Low Stock Threshold</label>
                 <input
                   type="number"
-                  step="0.01"
-                  {...register('totalCost', {
-                    required: 'Cost is required',
-                    min: { value: 0.01, message: 'Cost must be greater than 0' },
+                  {...register('lowStockThreshold', {
+                    required: 'Threshold is required',
+                    min: { value: 0, message: 'Threshold cannot be negative' },
                   })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="e.g., 20000"
+                  className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none"
+                  placeholder="e.g., 20"
                 />
-                {errors.totalCost && (
-                  <p className="text-red-500 text-sm mt-1">{errors.totalCost.message}</p>
-                )}
+                {errors.lowStockThreshold && <p className="mt-1 text-sm text-rose-400">{errors.lowStockThreshold.message}</p>}
               </div>
             </div>
 
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <p className="text-sm text-gray-600 mb-1">Calculated Unit Cost</p>
-              <p className="text-2xl font-semibold text-blue-900">৳{unitCost}</p>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                <p className="text-sm text-slate-400">Opening Stock Value</p>
+                <p className="mt-1 text-2xl font-semibold text-white">৳{(totalQuantity * purchasePrice).toLocaleString()}</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                <p className="text-sm text-slate-400">Projected Revenue</p>
+                <p className="mt-1 text-2xl font-semibold text-white">৳{(totalQuantity * sellingPrice).toLocaleString()}</p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                <p className="text-sm text-slate-400">Unit Margin</p>
+                <p className={`mt-1 text-2xl font-semibold ${grossProfitPerUnit >= 0 ? 'text-emerald-300' : 'text-rose-300'}`}>
+                  ৳{grossProfitPerUnit.toFixed(2)}
+                </p>
+              </div>
             </div>
 
-            <div className="flex gap-3">
+            <div className="flex gap-3 pt-2">
               <button
                 type="submit"
-                className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 transition-colors font-medium"
+                className="flex-1 rounded-xl bg-cyan-500 px-6 py-3 font-medium text-slate-950 transition-colors hover:bg-cyan-400"
               >
                 Add Product
               </button>
@@ -166,9 +201,9 @@ export function AddProduct({ onSuccess }: AddProductProps) {
                 type="button"
                 onClick={() => {
                   setShowForm(false);
-                  reset();
+                  reset({ lowStockThreshold: 10 });
                 }}
-                className="px-6 py-3 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                className="rounded-xl border border-white/10 px-6 py-3 text-slate-200 transition-colors hover:bg-white/5"
               >
                 Cancel
               </button>
@@ -177,46 +212,66 @@ export function AddProduct({ onSuccess }: AddProductProps) {
         </div>
       )}
 
-      <RecentProducts />
+      <RecentProducts searchTerm={searchTerm} setSearchTerm={setSearchTerm} />
     </div>
   );
 }
 
-function RecentProducts() {
-  const [products, setProducts] = useState(storage.getProducts());
+function RecentProducts({
+  searchTerm,
+  setSearchTerm,
+}: {
+  searchTerm: string;
+  setSearchTerm: (value: string) => void;
+}) {
+  const [products, setProducts] = useState<Product[]>(storage.getProducts());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
-  const [editSizeUnit, setEditSizeUnit] = useState('');
+  const [editUnit, setEditUnit] = useState('');
+  const [editPurchasePrice, setEditPurchasePrice] = useState<number>(0);
+  const [editSellingPrice, setEditSellingPrice] = useState<number>(0);
   const [editTotalQuantity, setEditTotalQuantity] = useState<number>(0);
-  const [editTotalCost, setEditTotalCost] = useState<number>(0);
+  const [editLowStockThreshold, setEditLowStockThreshold] = useState<number>(0);
 
   const refresh = () => setProducts(storage.getProducts());
 
-  const startEdit = (product: any) => {
+  const filteredProducts = useMemo(() => {
+    const normalized = searchTerm.trim().toLowerCase();
+    if (!normalized) return products;
+    return products.filter((product) =>
+      [product.name, String(product.purchasePrice), String(product.sellingPrice)].some((value) =>
+        value.toLowerCase().includes(normalized),
+      ),
+    );
+  }, [products, searchTerm]);
+
+  const startEdit = (product: Product) => {
     setEditingId(product.id);
     setEditName(product.name);
-    setEditSizeUnit(product.sizeUnit || '');
+    setEditUnit(product.unit || '');
+    setEditPurchasePrice(product.purchasePrice);
+    setEditSellingPrice(product.sellingPrice);
     setEditTotalQuantity(product.totalQuantity);
-    setEditTotalCost(product.totalCost);
+    setEditLowStockThreshold(product.lowStockThreshold);
   };
 
   const cancelEdit = () => {
     setEditingId(null);
   };
 
-  const saveEdit = (product: any) => {
-    if (!editTotalQuantity || editTotalQuantity < 1) return;
-    const unitCost = editTotalCost / editTotalQuantity;
-    const delta = editTotalQuantity - product.totalQuantity;
-    const newCurrentStock = product.currentStock + delta;
+  const saveEdit = (product: Product) => {
+    if (editTotalQuantity < 1) return;
+    const stockDelta = editTotalQuantity - product.totalQuantity;
+    const newCurrentStock = Math.max(0, product.currentStock + stockDelta);
 
     storage.updateProduct(product.id, {
       name: editName,
-      sizeUnit: editSizeUnit,
+      unit: editUnit,
+      purchasePrice: editPurchasePrice,
+      sellingPrice: editSellingPrice,
       totalQuantity: editTotalQuantity,
-      totalCost: editTotalCost,
-      unitCost: unitCost,
       currentStock: newCurrentStock,
+      lowStockThreshold: editLowStockThreshold,
     });
 
     setEditingId(null);
@@ -224,76 +279,113 @@ function RecentProducts() {
   };
 
   const handleDelete = (id: string) => {
-    if (!confirm('Delete this product and its logs?')) return;
+    if (!confirm('Delete this product and its linked records?')) return;
     storage.deleteProduct(id);
     refresh();
   };
 
   return (
-    <div className="bg-white rounded-lg shadow p-6">
-      <h2 className="mb-4">All Products</h2>
+    <div className="rounded-2xl border border-white/10 bg-slate-900/80 p-6 shadow-xl shadow-black/20 backdrop-blur">
+      <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className="text-xl font-semibold text-white">All Products</h2>
+          <p className="text-sm text-slate-400">Search, edit, and track stock status in one place.</p>
+        </div>
+        <div className="relative w-full md:max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+          <input
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Search products or prices"
+            className="w-full rounded-xl border border-white/10 bg-slate-950 py-3 pl-10 pr-4 text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none"
+          />
+        </div>
+      </div>
+
       {products.length === 0 ? (
-        <p className="text-gray-500 text-center py-8">No products added yet</p>
+        <p className="rounded-xl border border-dashed border-white/10 py-10 text-center text-slate-400">No products added yet</p>
+      ) : filteredProducts.length === 0 ? (
+        <p className="rounded-xl border border-dashed border-white/10 py-10 text-center text-slate-400">No products match your search</p>
       ) : (
         <div className="space-y-3">
-          {products.slice().reverse().map((product) => (
-            <div key={product.id} className="border border-gray-200 rounded-lg p-4 hover:bg-gray-50 transition-colors">
-              {editingId === product.id ? (
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-semibold">Editing: {product.name}</h3>
-                    <span className="text-sm text-gray-600">Available: {product.currentStock}</span>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-3">
-                    <input className="px-3 py-2 border rounded" value={editName} onChange={e => setEditName(e.target.value)} />
-                    <input className="px-3 py-2 border rounded" value={editSizeUnit} onChange={e => setEditSizeUnit(e.target.value)} placeholder="kg/ml/liter" />
-                    <input type="number" className="px-3 py-2 border rounded" value={editTotalQuantity} onChange={e => setEditTotalQuantity(Number(e.target.value))} />
-                    <input type="number" step="0.01" className="px-3 py-2 border rounded" value={editTotalCost} onChange={e => setEditTotalCost(Number(e.target.value))} />
-                  </div>
-                  <div className="flex gap-2">
-                    <button className="px-4 py-2 bg-green-600 text-white rounded" onClick={() => saveEdit(product)}>Save</button>
-                    <button className="px-4 py-2 border rounded" onClick={cancelEdit}>Cancel</button>
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <div>
-                      <h3 className="font-semibold">{product.name}</h3>
-                      <p className="text-xs text-gray-500">Size/Unit: {product.sizeUnit || 'N/A'}</p>
+          {filteredProducts.slice().reverse().map((product) => {
+            const isLow = product.currentStock <= product.lowStockThreshold && product.currentStock > 0;
+            const isOut = product.currentStock === 0;
+            const statusClass = isOut ? 'bg-rose-500/15 text-rose-300' : isLow ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/15 text-emerald-300';
+            const statusLabel = isOut ? 'Out of stock' : isLow ? 'Low stock' : 'In stock';
+
+            return (
+              <div key={product.id} className="rounded-xl border border-white/10 bg-white/5 p-4 transition-colors hover:bg-white/7">
+                {editingId === product.id ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold text-white">Editing: {product.name}</h3>
+                      <span className="text-sm text-slate-400">Available: {product.currentStock}</span>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-600">Available: {product.currentStock}</span>
-                      <button onClick={() => startEdit(product)} className="p-2 rounded hover:bg-gray-100" title="Edit">
-                        <Edit className="w-4 h-4 text-blue-600" />
-                      </button>
-                      <button onClick={() => handleDelete(product.id)} className="p-2 rounded hover:bg-gray-100" title="Delete">
-                        <Trash2 className="w-4 h-4 text-red-600" />
-                      </button>
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+                      <input className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-white" value={editName} onChange={(e) => setEditName(e.target.value)} />
+                      <input className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-white" value={editUnit} onChange={(e) => setEditUnit(e.target.value)} placeholder="Unit" />
+                      <input type="number" step="0.01" className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-white" value={editPurchasePrice} onChange={(e) => setEditPurchasePrice(Number(e.target.value))} />
+                      <input type="number" step="0.01" className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-white" value={editSellingPrice} onChange={(e) => setEditSellingPrice(Number(e.target.value))} />
+                      <input type="number" className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-white" value={editTotalQuantity} onChange={(e) => setEditTotalQuantity(Number(e.target.value))} />
+                    </div>
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                      <input type="number" className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-white" value={editLowStockThreshold} onChange={(e) => setEditLowStockThreshold(Number(e.target.value))} />
+                      <div className="flex gap-2">
+                        <button className="rounded-lg bg-emerald-500 px-4 py-2 font-medium text-slate-950" onClick={() => saveEdit(product)}>Save</button>
+                        <button className="rounded-lg border border-white/10 px-4 py-2 text-slate-200" onClick={cancelEdit}>Cancel</button>
+                      </div>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                    <div>
-                      <p className="text-gray-600">Total Qty</p>
-                      <p className="font-medium">{product.totalQuantity}</p>
+                ) : (
+                  <div>
+                    <div className="mb-2 flex items-start justify-between gap-4">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h3 className="font-semibold text-white">{product.name}</h3>
+                          <span className={`rounded-full px-2 py-1 text-xs font-medium ${statusClass}`}>{statusLabel}</span>
+                        </div>
+                        <p className="text-xs text-slate-400">{product.unit || 'Unit not set'} · Purchase ৳{product.purchasePrice.toFixed(2)} · Selling ৳{product.sellingPrice.toFixed(2)}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-slate-300">Available: {product.currentStock}</span>
+                        <button onClick={() => startEdit(product)} className="rounded-lg p-2 hover:bg-white/10" title="Edit">
+                          <Edit className="w-4 h-4 text-cyan-300" />
+                        </button>
+                        <button onClick={() => handleDelete(product.id)} className="rounded-lg p-2 hover:bg-white/10" title="Delete">
+                          <Trash2 className="w-4 h-4 text-rose-300" />
+                        </button>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-gray-600">Total Cost</p>
-                      <p className="font-medium">৳{product.totalCost.toLocaleString()}</p>
+                    <div className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
+                      <div>
+                        <p className="text-slate-400">Opening Qty</p>
+                        <p className="font-medium text-white">{product.totalQuantity}</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-400">Stock Value</p>
+                        <p className="font-medium text-white">৳{(product.currentStock * product.purchasePrice).toLocaleString()}</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-400">Margin / Unit</p>
+                        <p className="font-medium text-white">৳{(product.sellingPrice - product.purchasePrice).toFixed(2)}</p>
+                      </div>
+                      <div>
+                        <p className="text-slate-400">Threshold</p>
+                        <p className="font-medium text-white">{product.lowStockThreshold}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-gray-600">Unit Cost</p>
-                      <p className="font-medium">৳{product.unitCost.toFixed(2)}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-600">Stock Value</p>
-                      <p className="font-medium">৳{(product.currentStock * product.unitCost).toLocaleString()}</p>
+                    <div className="mt-3 flex items-center gap-2 text-sm text-slate-400">
+                      {isOut ? <AlertTriangle className="h-4 w-4 text-rose-300" /> : <CheckCircle2 className="h-4 w-4 text-emerald-300" />}
+                      <span>
+                        {isOut ? 'Restock immediately.' : isLow ? 'Inventory is approaching the alert threshold.' : 'Inventory is healthy.'}
+                      </span>
                     </div>
                   </div>
-                </div>
-              )}
-            </div>
-          ))}
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
