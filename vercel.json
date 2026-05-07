@@ -1,11 +1,6 @@
 {
   "buildCommand": "prisma generate && vite build",
   "devCommand": "concurrently \"vite\" \"tsx watch server/index.ts\"",
-  "functions": {
-    "api/[...path].ts": {
-      "runtime": "nodejs20.x"
-    }
-  },
   "routes": [
     {
       "src": "/api/(.*)",
