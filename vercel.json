@@ -7,7 +7,7 @@
       "dest": "/api/[...path].ts"
     },
     {
-      "src": "/(.*)",
+      "src": "/((?!api/|assets/|favicon.ico|robots.txt|.*\\.).*)",
       "dest": "/index.html"
     }
   ]
