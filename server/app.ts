@@ -50,12 +50,16 @@ app.use((request, _response, next) => {
   next();
 });
 
-app.get('/api/health', async (_request: express.Request, response: express.Response) => {
-  const productCount = await prisma.product.count();
-  response.json({ status: 'ok', database: 'connected', productCount });
+app.get('/api/health', async (_request: express.Request, response: express.Response, next) => {
+  try {
+    const productCount = await prisma.product.count();
+    response.json({ status: 'ok', database: 'connected', productCount });
+  } catch (error) {
+    next(error);
+  }
 });
 
-app.get('/api/bootstrap', async (_request: express.Request, response: express.Response) => {
+app.get('/api/bootstrap', async (_request: express.Request, response: express.Response, next) => {
   try {
     const [products, orders, sales, dispatches, returns] = await Promise.all([
       prisma.product.findMany({ orderBy: { createdAt: 'desc' } }),
@@ -67,163 +71,210 @@ app.get('/api/bootstrap', async (_request: express.Request, response: express.Re
 
     response.json({ products, orders, sales, dispatches, returns });
   } catch (error) {
-    console.error('Bootstrap error:', error);
-    throw error;
+    next(error);
   }
 });
 
-app.get('/api/products', async (_request: express.Request, response: express.Response) => {
-  const products = await prisma.product.findMany({ orderBy: { createdAt: 'desc' } });
-  response.json(products);
+app.get('/api/products', async (_request: express.Request, response: express.Response, next) => {
+  try {
+    const products = await prisma.product.findMany({ orderBy: { createdAt: 'desc' } });
+    response.json(products);
+  } catch (error) {
+    next(error);
+  }
 });
 
-app.post('/api/products', async (request: express.Request<unknown, unknown, ProductRequestBody>, response: express.Response) => {
-  const body = request.body;
-  const product = await prisma.product.create({
-    data: {
-      name: String(body.name ?? '').trim(),
-      unit: body.unit ? String(body.unit).trim() : null,
-      purchasePrice: Number(body.purchasePrice ?? 0),
-      sellingPrice: Number(body.sellingPrice ?? 0),
-      totalQuantity: Number(body.totalQuantity ?? 0),
-      currentStock: Number(body.currentStock ?? body.totalQuantity ?? 0),
-      lowStockThreshold: Number(body.lowStockThreshold ?? 10),
-    },
-  });
-
-  response.status(201).json(product);
-});
-
-app.put('/api/products/:id', async (request: express.Request<{ id: string }>, response: express.Response) => {
-  const product = await prisma.product.update({
-    where: { id: request.params.id },
-    data: request.body,
-  });
-
-  response.json(product);
-});
-
-app.delete('/api/products/:id', async (request: express.Request<{ id: string }>, response: express.Response) => {
-  await prisma.product.delete({ where: { id: request.params.id } });
-  response.status(204).send();
-});
-
-app.get('/api/orders', async (_request: express.Request, response: express.Response) => {
-  const orders = await prisma.dailyOrder.findMany({
-    orderBy: { createdAt: 'desc' },
-    include: { product: true },
-  });
-  response.json(orders.map(formatOrder));
-});
-
-app.post('/api/orders', async (request: express.Request<unknown, unknown, EntryRequestBody>, response: express.Response) => {
-  const body = request.body;
-  const created = await prisma.dailyOrder.create({
-    data: {
-      date: String(body.date ?? ''),
-      productId: String(body.productId ?? ''),
-      quantity: Number(body.quantity ?? 0),
-    },
-  });
-  response.status(201).json(created);
-});
-
-app.get('/api/sales', async (_request: express.Request, response: express.Response) => {
-  const sales = await prisma.dailySale.findMany({
-    orderBy: { createdAt: 'desc' },
-    include: { product: true },
-  });
-  response.json(sales.map(formatSale));
-});
-
-app.post('/api/sales', async (request: express.Request<unknown, unknown, SaleRequestBody>, response: express.Response) => {
-  const body = request.body;
-  const created = await prisma.dailySale.create({
-    data: {
-      date: String(body.date ?? ''),
-      productId: String(body.productId ?? ''),
-      quantity: Number(body.quantity ?? 0),
-      amount: Number(body.amount ?? 0),
-    },
-  });
-  response.status(201).json(created);
-});
-
-app.get('/api/dispatches', async (_request: express.Request, response: express.Response) => {
-  const dispatches = await prisma.morningDispatch.findMany({
-    orderBy: { createdAt: 'desc' },
-    include: { product: true },
-  });
-  response.json(dispatches.map(formatDispatch));
-});
-
-app.post('/api/dispatches', async (request: express.Request<unknown, unknown, EntryRequestBody>, response: express.Response) => {
-  const body = request.body;
-  const created = await prisma.$transaction(async (transaction) => {
-    const product = await transaction.product.findUnique({ where: { id: String(body.productId ?? '') } });
-
-    if (!product) {
-      throw new Error('Product not found');
-    }
-
-    const quantity = Number(body.quantity ?? 0);
-    if (quantity > product.currentStock) {
-      throw new Error('Insufficient stock for dispatch');
-    }
-
-    await transaction.product.update({
-      where: { id: product.id },
-      data: { currentStock: product.currentStock - quantity },
-    });
-
-    return transaction.morningDispatch.create({
+app.post('/api/products', async (request: express.Request<unknown, unknown, ProductRequestBody>, response: express.Response, next) => {
+  try {
+    const body = request.body;
+    const product = await prisma.product.create({
       data: {
-        date: String(body.date ?? ''),
-        productId: product.id,
-        quantity,
+        name: String(body.name ?? '').trim(),
+        unit: body.unit ? String(body.unit).trim() : null,
+        purchasePrice: Number(body.purchasePrice ?? 0),
+        sellingPrice: Number(body.sellingPrice ?? 0),
+        totalQuantity: Number(body.totalQuantity ?? 0),
+        currentStock: Number(body.currentStock ?? body.totalQuantity ?? 0),
+        lowStockThreshold: Number(body.lowStockThreshold ?? 10),
       },
     });
-  });
 
-  response.status(201).json(created);
+    response.status(201).json(product);
+  } catch (error) {
+    next(error);
+  }
 });
 
-app.get('/api/returns', async (_request: express.Request, response: express.Response) => {
-  const returns = await prisma.dailyReturn.findMany({
-    orderBy: { createdAt: 'desc' },
-    include: { product: true },
-  });
-  response.json(returns.map(formatReturn));
-});
-
-app.post('/api/returns', async (request: express.Request<unknown, unknown, SaleRequestBody>, response: express.Response) => {
-  const body = request.body;
-  const created = await prisma.$transaction(async (transaction) => {
-    const product = await transaction.product.findUnique({ where: { id: String(body.productId ?? '') } });
-
-    if (!product) {
-      throw new Error('Product not found');
-    }
-
-    const quantity = Number(body.quantity ?? 0);
-    const amount = Number(body.amount ?? 0);
-
-    await transaction.product.update({
-      where: { id: product.id },
-      data: { currentStock: product.currentStock + quantity },
+app.put('/api/products/:id', async (request: express.Request<{ id: string }>, response: express.Response, next) => {
+  try {
+    const product = await prisma.product.update({
+      where: { id: request.params.id },
+      data: request.body,
     });
 
-    return transaction.dailyReturn.create({
+    response.json(product);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.delete('/api/products/:id', async (request: express.Request<{ id: string }>, response: express.Response, next) => {
+  try {
+    await prisma.product.delete({ where: { id: request.params.id } });
+    response.status(204).send();
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/orders', async (_request: express.Request, response: express.Response, next) => {
+  try {
+    const orders = await prisma.dailyOrder.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: { product: true },
+    });
+    response.json(orders.map(formatOrder));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/orders', async (request: express.Request<unknown, unknown, EntryRequestBody>, response: express.Response, next) => {
+  try {
+    const body = request.body;
+    const created = await prisma.dailyOrder.create({
       data: {
         date: String(body.date ?? ''),
-        productId: product.id,
-        quantity,
-        amount,
+        productId: String(body.productId ?? ''),
+        quantity: Number(body.quantity ?? 0),
       },
     });
-  });
+    response.status(201).json(created);
+  } catch (error) {
+    next(error);
+  }
+});
 
-  response.status(201).json(created);
+app.get('/api/sales', async (_request: express.Request, response: express.Response, next) => {
+  try {
+    const sales = await prisma.dailySale.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: { product: true },
+    });
+    response.json(sales.map(formatSale));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/sales', async (request: express.Request<unknown, unknown, SaleRequestBody>, response: express.Response, next) => {
+  try {
+    const body = request.body;
+    const created = await prisma.dailySale.create({
+      data: {
+        date: String(body.date ?? ''),
+        productId: String(body.productId ?? ''),
+        quantity: Number(body.quantity ?? 0),
+        amount: Number(body.amount ?? 0),
+      },
+    });
+    response.status(201).json(created);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/dispatches', async (_request: express.Request, response: express.Response, next) => {
+  try {
+    const dispatches = await prisma.morningDispatch.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: { product: true },
+    });
+    response.json(dispatches.map(formatDispatch));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/dispatches', async (request: express.Request<unknown, unknown, EntryRequestBody>, response: express.Response, next) => {
+  try {
+    const body = request.body;
+    const created = await prisma.$transaction(async (transaction) => {
+      const product = await transaction.product.findUnique({ where: { id: String(body.productId ?? '') } });
+
+      if (!product) {
+        throw new Error('Product not found');
+      }
+
+      const quantity = Number(body.quantity ?? 0);
+      if (quantity > product.currentStock) {
+        throw new Error('Insufficient stock for dispatch');
+      }
+
+      await transaction.product.update({
+        where: { id: product.id },
+        data: { currentStock: product.currentStock - quantity },
+      });
+
+      return transaction.morningDispatch.create({
+        data: {
+          date: String(body.date ?? ''),
+          productId: product.id,
+          quantity,
+        },
+      });
+    });
+
+    response.status(201).json(created);
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get('/api/returns', async (_request: express.Request, response: express.Response, next) => {
+  try {
+    const returns = await prisma.dailyReturn.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: { product: true },
+    });
+    response.json(returns.map(formatReturn));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post('/api/returns', async (request: express.Request<unknown, unknown, SaleRequestBody>, response: express.Response, next) => {
+  try {
+    const body = request.body;
+    const created = await prisma.$transaction(async (transaction) => {
+      const product = await transaction.product.findUnique({ where: { id: String(body.productId ?? '') } });
+
+      if (!product) {
+        throw new Error('Product not found');
+      }
+
+      const quantity = Number(body.quantity ?? 0);
+      const amount = Number(body.amount ?? 0);
+
+      await transaction.product.update({
+        where: { id: product.id },
+        data: { currentStock: product.currentStock + quantity },
+      });
+
+      return transaction.dailyReturn.create({
+        data: {
+          date: String(body.date ?? ''),
+          productId: product.id,
+          quantity,
+          amount,
+        },
+      });
+    });
+
+    response.status(201).json(created);
+  } catch (error) {
+    next(error);
+  }
 });
 
 app.use((error: unknown, _request: express.Request, response: express.Response, _next: express.NextFunction) => {
