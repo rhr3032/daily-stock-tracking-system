@@ -112,8 +112,9 @@ export function AddProduct({ onSuccess }: AddProductProps) {
 
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-300">Product Name</label>
+              <label htmlFor="product-name" className="mb-2 block text-sm font-medium text-slate-300">Product Name</label>
               <input
+                id="product-name"
                 type="text"
                 {...register('name', { required: 'Product name is required' })}
                 className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none"
@@ -123,8 +124,9 @@ export function AddProduct({ onSuccess }: AddProductProps) {
             </div>
 
             <div>
-              <label className="mb-2 block text-sm font-medium text-slate-300">Product Unit</label>
+              <label htmlFor="product-unit" className="mb-2 block text-sm font-medium text-slate-300">Product Unit</label>
               <input
+                id="product-unit"
                 type="text"
                 {...register('unit', { required: 'Product unit is required' })}
                 className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-white placeholder:text-slate-500 focus:border-cyan-400 focus:outline-none"
@@ -135,8 +137,9 @@ export function AddProduct({ onSuccess }: AddProductProps) {
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-300">Purchase Price (৳)</label>
+                <label htmlFor="purchase-price" className="mb-2 block text-sm font-medium text-slate-300">Purchase Price (৳)</label>
                 <input
+                  id="purchase-price"
                   type="number"
                   step="0.01"
                   {...register('purchasePrice', {
@@ -151,8 +154,9 @@ export function AddProduct({ onSuccess }: AddProductProps) {
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-300">Selling Price (৳)</label>
+                <label htmlFor="selling-price" className="mb-2 block text-sm font-medium text-slate-300">Selling Price (৳)</label>
                 <input
+                  id="selling-price"
                   type="number"
                   step="0.01"
                   {...register('sellingPrice', {
@@ -169,8 +173,9 @@ export function AddProduct({ onSuccess }: AddProductProps) {
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-300">Opening Quantity</label>
+                <label htmlFor="opening-quantity" className="mb-2 block text-sm font-medium text-slate-300">Opening Quantity</label>
                 <input
+                  id="opening-quantity"
                   type="number"
                   {...register('totalQuantity', {
                     required: 'Quantity is required',
@@ -184,8 +189,9 @@ export function AddProduct({ onSuccess }: AddProductProps) {
               </div>
 
               <div>
-                <label className="mb-2 block text-sm font-medium text-slate-300">Low Stock Threshold</label>
+                <label htmlFor="low-stock-threshold" className="mb-2 block text-sm font-medium text-slate-300">Low Stock Threshold</label>
                 <input
+                  id="low-stock-threshold"
                   type="number"
                   {...register('lowStockThreshold', {
                     required: 'Threshold is required',
@@ -321,6 +327,7 @@ function RecentProducts({
         <div className="relative w-full md:max-w-sm">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
           <input
+            aria-label="Search products or prices"
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
             placeholder="Search products or prices"
@@ -350,14 +357,14 @@ function RecentProducts({
                       <span className="text-sm text-slate-400">Available: {product.currentStock}</span>
                     </div>
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
-                      <input className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-white" value={editName} onChange={(e) => setEditName(e.target.value)} />
-                      <input className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-white" value={editUnit} onChange={(e) => setEditUnit(e.target.value)} placeholder="Unit" />
-                      <input type="number" step="0.01" className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-white" value={editPurchasePrice} onChange={(e) => setEditPurchasePrice(Number(e.target.value))} />
-                      <input type="number" step="0.01" className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-white" value={editSellingPrice} onChange={(e) => setEditSellingPrice(Number(e.target.value))} />
-                      <input type="number" className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-white" value={editTotalQuantity} onChange={(e) => setEditTotalQuantity(Number(e.target.value))} />
+                      <input aria-label="Edit product name" className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-white" value={editName} onChange={(e) => setEditName(e.target.value)} />
+                      <input aria-label="Edit product unit" className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-white" value={editUnit} onChange={(e) => setEditUnit(e.target.value)} placeholder="Unit" />
+                      <input aria-label="Edit purchase price" type="number" step="0.01" className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-white" value={editPurchasePrice} onChange={(e) => setEditPurchasePrice(Number(e.target.value))} />
+                      <input aria-label="Edit selling price" type="number" step="0.01" className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-white" value={editSellingPrice} onChange={(e) => setEditSellingPrice(Number(e.target.value))} />
+                      <input aria-label="Edit total quantity" type="number" className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-white" value={editTotalQuantity} onChange={(e) => setEditTotalQuantity(Number(e.target.value))} />
                     </div>
                     <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                      <input type="number" className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-white" value={editLowStockThreshold} onChange={(e) => setEditLowStockThreshold(Number(e.target.value))} />
+                      <input aria-label="Edit low stock threshold" type="number" className="rounded-lg border border-white/10 bg-slate-950 px-3 py-2 text-white" value={editLowStockThreshold} onChange={(e) => setEditLowStockThreshold(Number(e.target.value))} />
                       <div className="flex gap-2">
                         <button className="rounded-lg bg-emerald-500 px-4 py-2 font-medium text-slate-950" onClick={() => void saveEdit(product)}>Save</button>
                         <button className="rounded-lg border border-white/10 px-4 py-2 text-slate-200" onClick={cancelEdit}>Cancel</button>

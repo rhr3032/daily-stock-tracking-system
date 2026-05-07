@@ -19,6 +19,8 @@ model Product {
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
+  orders           DailyOrder[]
+  sales            DailySale[]
   dispatches       MorningDispatch[]
   returns          DailyReturn[]
 }
@@ -38,6 +40,33 @@ model MorningDispatch {
 }
 
 model DailyReturn {
+  id         String   @id @default(uuid())
+  date       String
+  productId  String
+  quantity   Int
+  amount     Float
+  createdAt  DateTime @default(now())
+
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([date])
+  @@index([productId])
+}
+
+model DailyOrder {
+  id         String   @id @default(uuid())
+  date       String
+  productId  String
+  quantity   Int
+  createdAt  DateTime @default(now())
+
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([date])
+  @@index([productId])
+}
+
+model DailySale {
   id         String   @id @default(uuid())
   date       String
   productId  String

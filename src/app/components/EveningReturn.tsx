@@ -8,7 +8,10 @@ export function EveningReturn() {
   const [dispatches, setDispatches] = useState<MorningDispatch[]>([]);
   const [returns, setReturns] = useState<DailyReturn[]>([]);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [availableToReturnByProduct, setAvailableToReturnByProduct] = useState<Record<string, number>>({});
   const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [selectedProductId, setSelectedProductId] = useState('');
+  const [selectedQuantity, setSelectedQuantity] = useState(0);
   const [searchTerm, setSearchTerm] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
@@ -25,7 +28,7 @@ export function EveningReturn() {
       setDispatches(nextDispatches);
       setReturns(nextReturns);
 
-      const nextQuantities = allProducts.reduce<Record<string, number>>((acc, product) => {
+      const nextAvailableToReturn = allProducts.reduce<Record<string, number>>((acc, product) => {
         const dispatchedQty = nextDispatches
           .filter((dispatch) => dispatch.date === date && dispatch.productId === product.id)
           .reduce((sum, dispatch) => sum + dispatch.quantity, 0);
@@ -36,7 +39,10 @@ export function EveningReturn() {
         return acc;
       }, {});
 
-      setQuantities(nextQuantities);
+      setAvailableToReturnByProduct(nextAvailableToReturn);
+      setQuantities({});
+      setSelectedProductId('');
+      setSelectedQuantity(0);
     };
 
     void loadData();
@@ -48,14 +54,59 @@ export function EveningReturn() {
     return products.filter((product) => product.name.toLowerCase().includes(normalized));
   }, [products, searchTerm]);
 
-  const totalReturnQty = products.reduce((sum, product) => sum + Number(quantities[product.id] || 0), 0);
-  const totalReturnAmount = products.reduce((sum, product) => sum + (Number(quantities[product.id] || 0) * product.sellingPrice), 0);
+  const selectedProduct = products.find((product) => product.id === selectedProductId);
+  const selectedAvailableToReturn = selectedProductId ? availableToReturnByProduct[selectedProductId] || 0 : 0;
+
+  const handleAddProduct = () => {
+    setErrorMessage('');
+
+    if (!selectedProductId) {
+      setErrorMessage('Please select a product');
+      return;
+    }
+
+    if (selectedQuantity <= 0) {
+      setErrorMessage('Please enter a return quantity greater than 0');
+      return;
+    }
+
+    if (!selectedProduct) {
+      setErrorMessage('Please select a valid product.');
+      return;
+    }
+
+    if (selectedQuantity > selectedAvailableToReturn) {
+      setErrorMessage(`Return quantity for ${selectedProduct.name} exceeds the dispatched balance.`);
+      return;
+    }
+
+    setQuantities((prev) => ({
+      ...prev,
+      [selectedProductId]: selectedQuantity,
+    }));
+    setSelectedQuantity(0);
+    setSelectedProductId('');
+  };
+
+  const totalReturnQty = Object.values(quantities).reduce((sum, quantity) => sum + Number(quantity || 0), 0);
+  const totalReturnAmount = Object.entries(quantities).reduce((sum, [productId, quantity]) => {
+    const product = products.find((entry) => entry.id === productId);
+    if (!product) return sum;
+    return sum + Number(quantity || 0) * product.sellingPrice;
+  }, 0);
 
   const handleSave = async () => {
     setErrorMessage('');
 
-    const entries = products
-      .map((product) => ({ product, quantity: Number(quantities[product.id] || 0) }))
+    const entries = Object.entries(quantities)
+      .map(([productId, quantity]) => {
+        const product = products.find((entry) => entry.id === productId);
+        return {
+          product,
+          quantity: Number(quantity || 0),
+        };
+      })
+      .filter((item): item is { product: Product; quantity: number } => Boolean(item.product))
       .filter((item) => item.quantity > 0);
 
     if (!entries.length) return;
@@ -98,7 +149,7 @@ export function EveningReturn() {
       storage.getReturns(),
     ]);
     setProducts(allProducts);
-    const nextQuantities = allProducts.reduce<Record<string, number>>((acc, product) => {
+    const nextAvailableToReturn = allProducts.reduce<Record<string, number>>((acc, product) => {
       const dispatchedQty = nextDispatches
         .filter((dispatch) => dispatch.date === date && dispatch.productId === product.id)
         .reduce((sum, dispatch) => sum + dispatch.quantity, 0);
@@ -108,7 +159,10 @@ export function EveningReturn() {
       acc[product.id] = Math.max(0, dispatchedQty - returnedQty);
       return acc;
     }, {});
-    setQuantities(nextQuantities);
+    setAvailableToReturnByProduct(nextAvailableToReturn);
+    setQuantities({});
+    setSelectedProductId('');
+    setSelectedQuantity(0);
     setTimeout(() => setSuccessMessage(''), 2500);
   };
 
@@ -171,23 +225,71 @@ export function EveningReturn() {
           </div>
           <div>
             <h2 className="font-semibold text-white">Returned Goods</h2>
-            <p className="text-sm text-slate-400">Enter the product-wise returned quantities for the selected date.</p>
+            <p className="text-sm text-slate-400">Select products manually, then enter returned quantities for the selected date.</p>
           </div>
+        </div>
+
+        <div className="mb-6 rounded-xl border border-white/10 bg-white/5 p-4">
+          <p className="mb-3 text-sm font-medium text-white">Select Product Manually</p>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+            <div className="md:col-span-2">
+              <label className="mb-1 block text-xs font-medium text-slate-400">Product</label>
+              <select
+                value={selectedProductId}
+                onChange={(event) => setSelectedProductId(event.target.value)}
+                title="Select product"
+                className="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-white focus:border-orange-400 focus:outline-none"
+              >
+                <option value="">Select a product</option>
+                {filteredProducts.map((product) => (
+                  <option key={product.id} value={product.id}>
+                    {product.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-slate-400">Return Quantity</label>
+              <input
+                type="number"
+                min={0}
+                max={selectedAvailableToReturn}
+                value={selectedQuantity}
+                onChange={(event) => setSelectedQuantity(Number(event.target.value) || 0)}
+                title="Selected product return quantity"
+                placeholder="0"
+                className="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-white focus:border-orange-400 focus:outline-none"
+              />
+            </div>
+            <div className="flex items-end">
+              <button
+                type="button"
+                onClick={handleAddProduct}
+                className="w-full rounded-xl bg-orange-500 px-4 py-2 font-medium text-slate-950 transition-colors hover:bg-orange-400"
+              >
+                Add
+              </button>
+            </div>
+          </div>
+          {selectedProduct && (
+            <p className="mt-3 text-sm text-slate-400">
+              Available to return: {selectedAvailableToReturn.toLocaleString()} · Current stock: {selectedProduct.currentStock.toLocaleString()}
+            </p>
+          )}
         </div>
 
         {filteredProducts.length === 0 ? (
           <p className="rounded-xl border border-dashed border-white/10 py-10 text-center text-slate-400">No products available</p>
+        ) : Object.values(quantities).every((quantity) => Number(quantity || 0) <= 0) ? (
+          <p className="rounded-xl border border-dashed border-white/10 py-10 text-center text-slate-400">No products selected for return yet.</p>
         ) : (
           <div className="space-y-3">
-            {filteredProducts.map((product) => {
-              const dispatchTotal = dispatches
-                .filter((dispatch) => dispatch.date === date && dispatch.productId === product.id)
-                .reduce((sum, dispatch) => sum + dispatch.quantity, 0);
-              const currentReturn = returns
-                .filter((entry) => entry.date === date && entry.productId === product.id)
-                .reduce((sum, entry) => sum + entry.quantity, 0);
-              const availableToReturn = Math.max(0, dispatchTotal - currentReturn);
-              const quantity = quantities[product.id] ?? availableToReturn;
+            {Object.entries(quantities)
+              .filter(([, quantity]) => Number(quantity) > 0)
+              .map(([productId, quantity]) => {
+                const product = products.find((entry) => entry.id === productId);
+                if (!product) return null;
+                const availableToReturn = availableToReturnByProduct[product.id] || 0;
 
               return (
                 <div key={product.id} className="rounded-xl border border-white/10 bg-white/5 p-4">
@@ -196,7 +298,19 @@ export function EveningReturn() {
                       <p className="font-medium text-white">{product.name}</p>
                       <p className="text-sm text-slate-400">Available to return: {availableToReturn.toLocaleString()} · Return value uses selling price</p>
                     </div>
-                    <div className="text-right text-xs text-slate-400">Current stock: {product.currentStock}</div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setQuantities((prev) => {
+                          const next = { ...prev };
+                          delete next[product.id];
+                          return next;
+                        })
+                      }
+                      className="rounded-full border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs font-medium text-rose-200"
+                    >
+                      Remove
+                    </button>
                   </div>
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
                     <div>
@@ -205,7 +319,7 @@ export function EveningReturn() {
                         type="number"
                         min={0}
                         max={availableToReturn}
-                        value={quantity}
+                        value={Number(quantity || 0)}
                         onChange={(event) =>
                           setQuantities((prev) => ({
                             ...prev,
@@ -228,7 +342,7 @@ export function EveningReturn() {
                   </div>
                 </div>
               );
-            })}
+              })}
           </div>
         )}
 

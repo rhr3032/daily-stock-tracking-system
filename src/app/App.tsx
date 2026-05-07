@@ -1,10 +1,21 @@
-import { useState } from 'react';
+import { lazy, Suspense, useState } from 'react';
 import { LayoutDashboard, Package, History, Menu, X, RotateCcw, Truck } from 'lucide-react';
-import { Dashboard } from './components/Dashboard';
-import { AddProduct } from './components/AddProduct';
-import { EveningReturn } from './components/EveningReturn';
-import { History as HistoryPage } from './components/History';
-import { MorningDispatch } from './components/MorningDispatch';
+
+const Dashboard = lazy(() =>
+  import('./components/Dashboard').then((module) => ({ default: module.Dashboard }))
+);
+const AddProduct = lazy(() =>
+  import('./components/AddProduct').then((module) => ({ default: module.AddProduct }))
+);
+const EveningReturn = lazy(() =>
+  import('./components/EveningReturn').then((module) => ({ default: module.EveningReturn }))
+);
+const HistoryPage = lazy(() =>
+  import('./components/History').then((module) => ({ default: module.History }))
+);
+const MorningDispatch = lazy(() =>
+  import('./components/MorningDispatch').then((module) => ({ default: module.MorningDispatch }))
+);
 
 type Page = 'dashboard' | 'products' | 'dispatch' | 'returns' | 'history';
 
@@ -118,7 +129,17 @@ export default function App() {
         </header>
 
         <main className="flex-1 px-3 py-6 sm:px-4 md:px-6 lg:px-8">
-          <div className="mx-auto w-full">{renderPage()}</div>
+          <div className="mx-auto w-full">
+            <Suspense
+              fallback={
+                <div className="rounded-xl border border-white/10 bg-white/[0.03] p-6 text-sm text-slate-300">
+                  Loading...
+                </div>
+              }
+            >
+              {renderPage()}
+            </Suspense>
+          </div>
         </main>
       </div>
     </div>

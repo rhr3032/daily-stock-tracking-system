@@ -1,6 +1,6 @@
 import { DailyOrder, DailyReturn, DailySale, MorningDispatch, Product } from '../types';
 
-const API_BASE = '/api';
+const API_BASE = import.meta.env.VITE_API_BASE || '/api';
 
 type BootstrapData = {
   products: Product[];
@@ -22,12 +22,17 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!response.ok) {
     let message = 'Request failed';
     try {
-      const body = await response.json();
-      if (typeof body?.message === 'string') {
-        message = body.message;
+      const text = await response.text();
+      if (text) {
+        const body = JSON.parse(text);
+        if (typeof body?.message === 'string') {
+          message = body.message;
+        } else {
+          message = text;
+        }
       }
     } catch {
-      message = await response.text();
+      // If parsing fails, keep default message
     }
     throw new Error(message || 'Request failed');
   }

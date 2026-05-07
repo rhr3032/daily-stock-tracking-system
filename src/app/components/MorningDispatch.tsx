@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Truck, Calendar, Package, ArrowRight } from 'lucide-react';
+import { Truck, ArrowRight } from 'lucide-react';
 import { storage } from '../utils/storage';
 import { Product, DailySale } from '../types';
 
@@ -7,26 +7,38 @@ export function MorningDispatch() {
   const [products, setProducts] = useState<Product[]>([]);
   const [sales, setSales] = useState<DailySale[]>([]);
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [suggestedQuantities, setSuggestedQuantities] = useState<Record<string, number>>({});
   const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [selectedProductId, setSelectedProductId] = useState('');
+  const [selectedQuantity, setSelectedQuantity] = useState(0);
   const [successMessage, setSuccessMessage] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     const loadData = async () => {
-      const [allProducts, allSales] = await Promise.all([storage.getProducts(), storage.getSales()]);
-      setProducts(allProducts);
+      setIsLoading(true);
+      try {
+        const data = await storage.getBootstrap();
+        setProducts(data.products);
 
-      const selected = new Date(date);
-      selected.setDate(selected.getDate() - 1);
-      const previousDate = selected.toISOString().split('T')[0];
+        const selected = new Date(date);
+        selected.setDate(selected.getDate() - 1);
+        const previousDate = selected.toISOString().split('T')[0];
 
-      const previousSales = allSales.filter((sale) => sale.date === previousDate);
-      setSales(previousSales);
-      setQuantities(
-        previousSales.reduce<Record<string, number>>((acc, sale) => {
-          acc[sale.productId] = (acc[sale.productId] || 0) + sale.quantity;
-          return acc;
-        }, {}),
-      );
+        const previousSales = data.sales.filter((sale) => sale.date === previousDate);
+        setSales(previousSales);
+        setSuggestedQuantities(
+          previousSales.reduce<Record<string, number>>((acc, sale) => {
+            acc[sale.productId] = (acc[sale.productId] || 0) + sale.quantity;
+            return acc;
+          }, {}),
+        );
+        setQuantities({});
+        setSelectedProductId('');
+        setSelectedQuantity(0);
+      } finally {
+        setIsLoading(false);
+      }
     };
 
     void loadData();
@@ -36,6 +48,31 @@ export function MorningDispatch() {
     () => Object.values(quantities).reduce((sum, value) => sum + Number(value || 0), 0),
     [quantities],
   );
+
+  const selectedProduct = products.find((product) => product.id === selectedProductId);
+  const selectedProductSuggested = selectedProductId ? suggestedQuantities[selectedProductId] || 0 : 0;
+
+  const handleAddProduct = () => {
+    if (!selectedProductId) {
+      alert('Please select a product');
+      return;
+    }
+    if (selectedQuantity <= 0) {
+      alert('Please enter a quantity greater than 0');
+      return;
+    }
+    if (!selectedProduct || selectedQuantity > selectedProduct.currentStock) {
+      alert(`${selectedProduct?.name || 'Selected product'} does not have enough stock for dispatch.`);
+      return;
+    }
+
+    setQuantities((prev) => ({
+      ...prev,
+      [selectedProductId]: selectedQuantity,
+    }));
+    setSelectedQuantity(0);
+    setSelectedProductId('');
+  };
 
   const handleSave = async () => {
     const items = Object.entries(quantities)
@@ -69,19 +106,22 @@ export function MorningDispatch() {
     }
 
     setSuccessMessage('Morning dispatch saved successfully.');
-    const [allProducts, allSales] = await Promise.all([storage.getProducts(), storage.getSales()]);
-    setProducts(allProducts);
+    const data = await storage.getBootstrap();
+    setProducts(data.products);
     const selected = new Date(date);
     selected.setDate(selected.getDate() - 1);
     const previousDate = selected.toISOString().split('T')[0];
-    const previousSales = allSales.filter((sale) => sale.date === previousDate);
+    const previousSales = data.sales.filter((sale) => sale.date === previousDate);
     setSales(previousSales);
-    setQuantities(
+    setSuggestedQuantities(
       previousSales.reduce<Record<string, number>>((acc, sale) => {
         acc[sale.productId] = (acc[sale.productId] || 0) + sale.quantity;
         return acc;
       }, {}),
     );
+    setQuantities({});
+    setSelectedProductId('');
+    setSelectedQuantity(0);
     setTimeout(() => setSuccessMessage(''), 2500);
   };
 
@@ -127,23 +167,97 @@ export function MorningDispatch() {
         </div>
 
         <div className="mt-6 space-y-3">
-          {products.length === 0 ? (
-            <p className="rounded-xl border border-dashed border-white/10 py-10 text-center text-slate-400">No products available</p>
+          <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+            <p className="mb-3 text-sm font-medium text-white">Select Product Manually</p>
+            {isLoading ? (
+              <p className="text-sm text-slate-400">Loading products...</p>
+            ) : products.length === 0 ? (
+              <p className="text-sm text-amber-400">No products available. Please add products first from the "Add Product" page.</p>
+            ) : (
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+                <div className="md:col-span-2">
+                  <label className="mb-1 block text-xs font-medium text-slate-400">Product</label>
+                  <select
+                    value={selectedProductId}
+                    onChange={(event) => setSelectedProductId(event.target.value)}
+                    title="Select product"
+                    className="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-white focus:border-amber-400 focus:outline-none"
+                  >
+                    <option value="">Select a product</option>
+                    {products.map((product) => (
+                      <option key={product.id} value={product.id}>
+                        {product.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium text-slate-400">Dispatch Quantity</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={selectedProduct?.currentStock || 0}
+                    value={selectedQuantity}
+                    onChange={(event) => setSelectedQuantity(Number(event.target.value) || 0)}
+                    title="Selected product dispatch quantity"
+                    placeholder="0"
+                    className="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-white focus:border-amber-400 focus:outline-none"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <button
+                    type="button"
+                    onClick={handleAddProduct}
+                    className="w-full rounded-xl bg-amber-500 px-4 py-2 font-medium text-slate-950 transition-colors hover:bg-amber-400"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+            )}
+            {selectedProduct && (
+              <p className="mt-3 text-sm text-slate-400">
+                Suggested from yesterday: {selectedProductSuggested.toLocaleString()} · Stock available: {selectedProduct.currentStock.toLocaleString()}
+              </p>
+            )}
+          </div>
+
+          {products.length === 0 ? null : Object.values(quantities).every((quantity) => Number(quantity || 0) <= 0) ? (
+            <p className="rounded-xl border border-dashed border-white/10 py-10 text-center text-slate-400">No products selected for dispatch yet.</p>
           ) : (
-            products.map((product) => {
-              const suggested = quantities[product.id] ?? 0;
+            Object.entries(quantities)
+              .filter(([, quantity]) => Number(quantity) > 0)
+              .map(([productId, quantity]) => {
+                const product = products.find((entry) => entry.id === productId);
+                if (!product) return null;
+
+                const suggested = Number(quantity || 0);
+                const previousSalesQty = sales
+                  .filter((sale) => sale.productId === product.id)
+                  .reduce((sum, sale) => sum + sale.quantity, 0);
+
               return (
                 <div key={product.id} className="rounded-xl border border-white/10 bg-white/5 p-4">
                   <div className="mb-2 flex items-center justify-between gap-4">
                     <div>
                       <p className="font-medium text-white">{product.name}</p>
                       <p className="text-sm text-slate-400">
-                        Previous sales: {sales.filter((sale) => sale.productId === product.id).reduce((sum, sale) => sum + sale.quantity, 0)} · Stock available: {product.currentStock}
+                        Previous sales: {previousSalesQty} · Stock available: {product.currentStock}
                       </p>
                     </div>
-                    <div className="rounded-full bg-amber-500/15 px-3 py-1 text-xs font-medium text-amber-300">
-                      Suggested from yesterday
-                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setQuantities((prev) => {
+                          const next = { ...prev };
+                          delete next[product.id];
+                          return next;
+                        })
+                      }
+                      className="rounded-full border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-xs font-medium text-rose-200"
+                    >
+                      Remove
+                    </button>
                   </div>
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                     <div>
@@ -175,7 +289,7 @@ export function MorningDispatch() {
                   </div>
                 </div>
               );
-            })
+              })
           )}
         </div>
 

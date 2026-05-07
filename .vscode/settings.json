@@ -1,0 +1,5 @@
+{
+  "prisma.enableDiagnostics": false,
+  "prisma.pinToPrisma6": true,
+  "prisma.scriptRunner": "npx"
+}
